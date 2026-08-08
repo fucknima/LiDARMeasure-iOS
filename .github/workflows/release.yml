@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Report Xcode environment
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then brew install xcodegen; fi
+          xcodegen generate
+
+      - name: Run unit tests
+        run: |
+          xcodebuild test \
+            -project LiDARMeasure.xcodeproj \
+            -scheme LiDARMeasure \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -derivedDataPath build-test \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Build unsigned iphoneos Release
+        run: |
+          xcodebuild clean build \
+            -project LiDARMeasure.xcodeproj \
+            -scheme LiDARMeasure \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Package unsigned IPA
+        run: bash ./Scripts/package_unsigned_ipa.sh build "${GITHUB_REF_NAME#v}"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/LiDARMeasure-v*-unsigned.ipa
+          generate_release_notes: true

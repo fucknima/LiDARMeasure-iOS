@@ -1,0 +1,28 @@
+# Xcode / SwiftPM
+DerivedData/
+.build/
+build/
+build-test/
+xcuserdata/
+*.xcuserstate
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+Package.resolved
+
+# Generated and local artifacts
+Payload/
+*.ipa
+*.dSYM.zip
+.DS_Store
+
+# Signing and secrets
+*.p12
+*.mobileprovision
+*.cer
+*.key
+.env
+
+# IDE / OS
+.idea/
+.vscode/
+Thumbs.db
