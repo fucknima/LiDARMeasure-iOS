@@ -26,7 +26,10 @@ jobs:
           xcodegen version
 
       - name: Generate Xcode project
-        run: xcodegen generate
+        run: |
+          xcodegen generate
+          xcodegen version
+          grep -n "ObjectDetector" LiDARMeasure.xcodeproj/project.pbxproj | head -10
 
       - name: Verify model present in repo
         run: |
