@@ -14,7 +14,7 @@ model = YOLO("yolov8n.pt")
 print(f"[export] model loaded in {time.time() - start:.1f}s", flush=True)
 
 start = time.time()
-path = model.export(format="coreml", imgsz=640, nms=True, half=True)
+path = str(model.export(format="coreml", imgsz=640, nms=True, half=True))
 print(f"[export] coreml exported -> {path} in {time.time() - start:.1f}s", flush=True)
 
 # 统一命名为 ObjectDetector.mlpackage
