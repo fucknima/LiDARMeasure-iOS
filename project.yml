@@ -28,6 +28,7 @@ targets:
     resources:
       - path: LiDARMeasure/Supporting/Assets.xcassets
       - path: LiDARMeasure/ML/ObjectDetector.mlpackage
+        explicitFileType: wrapper.mlpackage
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lidarmeasure.app
