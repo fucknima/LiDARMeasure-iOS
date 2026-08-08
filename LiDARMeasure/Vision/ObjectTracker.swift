@@ -28,8 +28,8 @@ struct ObjectTracker {
 
         for (stableID, track) in tracks {
             guard let matchIndex = available.indices.min(by: {
-                associationCost(available[$0], track.object) < associationCost(available[$1], track.object)
-            }), associationCost(available[matchIndex], track.object) < 0.5 else {
+                associationCost(available[$0], to: track.object) < associationCost(available[$1], to: track.object)
+            }), associationCost(available[matchIndex], to: track.object) < 0.5 else {
                 var stale = track
                 stale.missedFrames += 1
                 if stale.missedFrames <= maxMissed {

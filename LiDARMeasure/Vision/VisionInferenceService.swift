@@ -33,7 +33,7 @@ actor VisionInferenceService {
 
     /// 更新推理频率（热降频等场景）。
     func setInferenceRate(_ fps: Float) {
-        interval = 1 / max(1, min(10, fps))
+        interval = 1.0 / Double(max(1, min(10, Int(fps))))
     }
 
     /// 推理一帧。返回 nil 表示跳过（节流/堆积）。
