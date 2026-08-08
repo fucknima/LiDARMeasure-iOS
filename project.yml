@@ -1,4 +1,4 @@
-name: LiDARMeasure
+﻿name: LiDARMeasure
 
 options:
   bundleIdPrefix: com.lidarmeasure
@@ -11,8 +11,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.10"
-    MARKETING_VERSION: "0.2.0"
-    CURRENT_PROJECT_VERSION: "2"
+    MARKETING_VERSION: "0.3.0"
+    CURRENT_PROJECT_VERSION: "3"
     IPHONEOS_DEPLOYMENT_TARGET: "17.0"
 
 targets:
@@ -31,7 +31,7 @@ targets:
       - name: Compile CoreML model
         basedOnDependencyAnalysis: false
         script: |
-          xcrun coremlcompiler compile "${SRCROOT}/LiDARMeasure/ML/ObjectDetector.mlpackage" "${CONFIGURATION_TEMP_DIR}/ml"
+          xcrun coremlcompiler compile "${SRCROOT}/LiDARMeasure/ML/ObjectSegmenter.mlpackage" "${CONFIGURATION_TEMP_DIR}/ml"
           rm -rf "${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ObjectDetector.mlmodelc"
           cp -R "${CONFIGURATION_TEMP_DIR}/ml/ObjectDetector.mlmodelc" "${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/"
     settings:
@@ -61,3 +61,4 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.lidarmeasure.tests
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/LiDARMeasure.app/LiDARMeasure"
         BUNDLE_LOADER: "$(TEST_HOST)"
+

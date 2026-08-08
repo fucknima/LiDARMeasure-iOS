@@ -41,11 +41,18 @@ enum YOLO26SegDecoder {
     static let maskSize = 160
     static let inputSize: Float = 640
 
-    private struct DecodedBox {
+    struct DecodedBox {
         let classIndex: Int
         let confidence: Float
         let box: CGRect
         let coefficients: [Float]
+
+        init(classIndex: Int, confidence: Float, box: CGRect, coefficients: [Float] = []) {
+            self.classIndex = classIndex
+            self.confidence = confidence
+            self.box = box
+            self.coefficients = coefficients
+        }
     }
 
     static func decode(

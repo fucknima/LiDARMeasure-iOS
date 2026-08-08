@@ -1,4 +1,4 @@
-name: Release
+﻿name: Release
 
 on:
   push:
@@ -26,7 +26,7 @@ jobs:
 
       - name: Verify model present in repo
         run: |
-          test -e LiDARMeasure/ML/ObjectDetector.mlpackage
+          test -e LiDARMeasure/ML/ObjectSegmenter.mlpackage
           echo "model present"
 
       - name: Run unit tests
@@ -58,3 +58,4 @@ jobs:
         with:
           files: artifacts/LiDARMeasure-v*-unsigned.ipa
           generate_release_notes: true
+
