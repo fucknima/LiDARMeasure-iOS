@@ -15,19 +15,23 @@ final class YOLO26SegDecoderTests: XCTestCase {
     private func fillProtoConstant(_ proto: MLMultiArray, channel: Int, value: Float) {
         for y in 0..<160 {
             for x in 0..<160 {
-                proto[0, channel, y, x] = NSNumber(value: value)
+                proto[[NSNumber(value: 0), NSNumber(value: channel), NSNumber(value: y), NSNumber(value: x)]] = NSNumber(value: value)
             }
         }
     }
 
+    private func setPreds(_ array: MLMultiArray, d: Int, ch: Int, value: Double) {
+        array[[NSNumber(value: 0), NSNumber(value: d), NSNumber(value: ch)]] = NSNumber(value: value)
+    }
+
     func testDecodeSingleDetection() throws {
         let preds = try makePreds()
-        preds[0, 0, 0] = 100   // x1
-        preds[0, 0, 1] = 120   // y1
-        preds[0, 0, 2] = 240   // x2
-        preds[0, 0, 3] = 280   // y2
-        preds[0, 0, 4] = 0.9   // confidence
-        preds[0, 0, 5] = 0     // class 0 = person
+        setPreds(preds, d: 0, ch: 0, value: 100)   // x1
+        setPreds(preds, d: 0, ch: 1, value: 120)   // y1
+        setPreds(preds, d: 0, ch: 2, value: 240)   // x2
+        setPreds(preds, d: 0, ch: 3, value: 280)   // y2
+        setPreds(preds, d: 0, ch: 4, value: 0.9)   // confidence
+        setPreds(preds, d: 0, ch: 5, value: 0)     // class 0 = person
         let proto = try makeProto()
 
         let objects = try YOLO26SegDecoder.decode(preds: preds, proto: proto, options: .init())
@@ -40,12 +44,12 @@ final class YOLO26SegDecoderTests: XCTestCase {
 
     func testLowConfidenceFiltered() throws {
         let preds = try makePreds()
-        preds[0, 0, 0] = 100
-        preds[0, 0, 1] = 100
-        preds[0, 0, 2] = 200
-        preds[0, 0, 3] = 200
-        preds[0, 0, 4] = 0.1   // 低于默认阈值 0.3
-        preds[0, 0, 5] = 0
+        setPreds(preds, d: 0, ch: 0, value: 100)
+        setPreds(preds, d: 0, ch: 1, value: 100)
+        setPreds(preds, d: 0, ch: 2, value: 200)
+        setPreds(preds, d: 0, ch: 3, value: 200)
+        setPreds(preds, d: 0, ch: 4, value: 0.1)   // 低于默认阈值 0.3
+        setPreds(preds, d: 0, ch: 5, value: 0)
         let proto = try makeProto()
         let objects = try YOLO26SegDecoder.decode(preds: preds, proto: proto, options: .init())
         XCTAssertTrue(objects.isEmpty)
