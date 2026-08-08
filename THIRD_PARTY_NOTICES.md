@@ -3,16 +3,22 @@
 LiDARMeasure 核心代码未复制第三方仓库源代码；核心能力来自 Apple SDK
 （ARKit、RealityKit、RoomPlan、Vision、CoreML、Accelerate、simd、AVFoundation、Photos、OSLog）。
 
-## ObjectDetector CoreML 模型（YOLOv8n）
+## ObjectSegmenter CoreML 模型（YOLO26m-seg）
 
-- 来源：Ultralytics 预训练权重 `yolov8n.pt`（https://github.com/ultralytics/ultralytics）
+- 来源：Ultralytics 预训练权重 `yolo26m-seg.pt`（https://github.com/ultralytics/ultralytics）
 - License: **AGPL-3.0**（权重与代码）
-- 用途：自动模式目标检测（COCO 80 类，含 NMS）
-- 导出：`Scripts/export_model.py`（macOS，见 `MODEL_INFO.md`）
-- Modified: 无（仅转换格式为 CoreML mlpackage）
+- 用途：自动模式实例分割（COCO 80 类，输出检测 + mask prototypes）
+- 导出：`Scripts/export_yolo26_seg.py`（macOS，见 `MODEL_INFO.md`）
+- Modified: 无（仅转换格式为 CoreML mlpackage，INT8 量化）
 
 **许可证影响**：本仓库 LICENCE 为 MIT，嵌入 AGPL-3.0 模型后对外分发需按
 AGPL-3.0 提供源码；未来若需闭源上架，必须替换为宽松许可证模型（见 MODEL_INFO.md）。
+
+## 测试图片（Tests/Fixtures）
+
+- `coco_bus.jpg` / `coco_person.jpg`：来自 Ultralytics assets 仓库
+  （https://github.com/ultralytics/assets），License: AGPL-3.0（与模型一致），
+  仅用于 CI 模型 smoke test 与本地验证。
 
 ## 参考的 Apple 官方 Sample（仅参考思路，未复制源文件）
 
