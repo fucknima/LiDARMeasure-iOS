@@ -24,6 +24,7 @@ targets:
         excludes:
           - Supporting/Info.plist
           - Supporting/Assets.xcassets
+          - ML
     resources:
       - path: LiDARMeasure/Supporting/Assets.xcassets
       - path: LiDARMeasure/ML/ObjectDetector.mlpackage
