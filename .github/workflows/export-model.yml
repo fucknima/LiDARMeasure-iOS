@@ -1,0 +1,46 @@
+name: Export CoreML Model
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'Scripts/export_model.py'
+      - '.github/workflows/export-model.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # runner 默认 Python 3.14 无 coremltools 二进制 wheel（源码构建缺 C++ 扩展），固定 3.12。
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python3 --version
+          python3 -m venv mlvenv
+          ./mlvenv/bin/pip install --upgrade pip -q
+          ./mlvenv/bin/pip install ultralytics coremltools -q
+
+      - name: Export YOLO11n CoreML
+        run: ./mlvenv/bin/python Scripts/export_model.py
+
+      - name: Verify model output
+        run: |
+          ls -la ObjectDetector.mlpackage
+          ./mlvenv/bin/python Scripts/inspect_model.py
+
+      - name: Upload model artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ObjectDetector-mlpackage
+          path: ObjectDetector.mlpackage
+          if-no-files-found: error

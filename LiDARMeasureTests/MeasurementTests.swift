@@ -2,32 +2,45 @@ import XCTest
 @testable import LiDARMeasure
 
 final class MeasurementTests: XCTestCase {
-    func testSmootherUsesMedian() {
-        var smoother = MeasurementSmoother(windowSize: 5, relativeTolerance: 0.02, stableFrameCount: 3)
+    func testStabilizerUsesMedian() {
+        var stabilizer = DimensionStabilizer(windowSize: 5, stableThreshold: 0.03, lockFrameCount: 3)
         for _ in 0..<5 {
-            _ = smoother.add(MeasurementDimensions(width: 0.425, height: 0.312, depth: 0.281))
+            _ = stabilizer.add(MeasurementDimensions(width: 0.425, height: 0.312, depth: 0.281))
         }
-        XCTAssertEqual(smoother.current?.width ?? 0, 0.425, accuracy: 0.0001)
-        XCTAssertEqual(smoother.current?.height ?? 0, 0.312, accuracy: 0.0001)
+        XCTAssertEqual(stabilizer.current?.width ?? 0, 0.425, accuracy: 0.0001)
+        XCTAssertEqual(stabilizer.current?.height ?? 0, 0.312, accuracy: 0.0001)
+        XCTAssertEqual(stabilizer.current?.depth ?? 0, 0.281, accuracy: 0.0001)
     }
 
-    func testSmootherLocksAfterStableSamples() {
-        var smoother = MeasurementSmoother(windowSize: 5, relativeTolerance: 0.02, stableFrameCount: 3)
-        XCTAssertFalse(smoother.isStable)
-        for _ in 0..<3 {
-            _ = smoother.add(MeasurementDimensions(width: 0.425, height: 0.312, depth: 0.281))
+    func testStabilizerLocksAfterStableSamples() {
+        var stabilizer = DimensionStabilizer(windowSize: 12, stableThreshold: 0.03, lockFrameCount: 5)
+        XCTAssertFalse(stabilizer.isLocked)
+        for _ in 0..<5 {
+            _ = stabilizer.add(MeasurementDimensions(width: 0.425, height: 0.312, depth: 0.281))
         }
-        XCTAssertTrue(smoother.isStable)
+        XCTAssertTrue(stabilizer.isLocked)
     }
 
-    func testSmootherResetClearsState() {
-        var smoother = MeasurementSmoother(windowSize: 5, relativeTolerance: 0.02, stableFrameCount: 3)
-        for _ in 0..<3 {
-            _ = smoother.add(MeasurementDimensions(width: 0.425, height: 0.312, depth: 0.281))
+    func testStabilizerDoesNotLockWithJitter() {
+        var stabilizer = DimensionStabilizer(windowSize: 12, stableThreshold: 0.03, lockFrameCount: 5)
+        for index in 0..<10 {
+            _ = stabilizer.add(MeasurementDimensions(
+                width: 0.425 + (index.isMultiple(of: 2) ? 0.05 : 0),
+                height: 0.312,
+                depth: 0.281
+            ))
         }
-        smoother.reset()
-        XCTAssertFalse(smoother.isStable)
-        XCTAssertNil(smoother.current)
+        XCTAssertFalse(stabilizer.isLocked)
+    }
+
+    func testStabilizerResetClearsState() {
+        var stabilizer = DimensionStabilizer(windowSize: 12, stableThreshold: 0.03, lockFrameCount: 5)
+        for _ in 0..<5 {
+            _ = stabilizer.add(MeasurementDimensions(width: 0.425, height: 0.312, depth: 0.281))
+        }
+        stabilizer.reset()
+        XCTAssertFalse(stabilizer.isLocked)
+        XCTAssertNil(stabilizer.current)
     }
 
     func testQualityGradesPoorWithBadConditions() {
@@ -61,5 +74,10 @@ final class MeasurementTests: XCTestCase {
             distanceMeters: 0.3
         )
         XCTAssertEqual(record.primaryText, "长度 30.0 cm")
+    }
+
+    func testAutoMeasureErrorMessages() {
+        XCTAssertEqual(AutoMeasureError.noObject.message, "未检测到支持的目标，可点击框选")
+        XCTAssertEqual(AutoMeasureError.insufficientPoints.message, "物体区域有效深度点过少")
     }
 }

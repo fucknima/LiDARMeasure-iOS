@@ -20,6 +20,20 @@ struct SettingsView: View {
                     .pickerStyle(.menu)
                 }
 
+                Section("自动检测") {
+                    VStack(alignment: .leading) {
+                        Text(String(format: "检测阈值：%.0f%%", viewModel.detectionThreshold * 100))
+                        Slider(value: $viewModel.detectionThreshold, in: 0.2...0.8, step: 0.05)
+                        Text("低于阈值的检测结果将被忽略。默认 35%，调试时可降低到 20%。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if !viewModel.pipelineDebug.detectorOn {
+                        Label("检测模型加载失败", systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.red)
+                    }
+                }
+
                 Section("设备能力") {
                     ForEach(viewModel.capabilities.summary, id: \.self) { item in
                         Text(item)

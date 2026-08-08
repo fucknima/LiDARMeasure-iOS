@@ -10,21 +10,26 @@ final class MeasureViewModel: ObservableObject {
     let roomPlanService = RoomPlanService()
     let historyStore = HistoryStore()
     let renderer = ARRenderer()
+    let autoCoordinator = AutoMeasureCoordinator()
 
     @Published var unit: MeasurementUnit {
         didSet {
             UserDefaults.standard.set(unit.rawValue, forKey: "measurement.unit")
         }
     }
-
+    @Published var detectionThreshold: Float {
+        didSet {
+            UserDefaults.standard.set(detectionThreshold, forKey: "detection.threshold")
+            autoCoordinator.setThreshold(detectionThreshold)
+        }
+    }
     @Published var mode: MeasurementMode = .automatic {
         didSet { modeDidChange(oldValue: oldValue) }
     }
     @Published private(set) var dimensions: MeasurementDimensions?
     @Published private(set) var distanceMeters: Float?
     @Published private(set) var quality: MeasurementQuality?
-    @Published private(set) var statusText = "对准物体并保持手机稳定"
-    @Published private(set) var detectionLabel: String?
+    @Published private(set) var manualStatusText = "对准物体并保持手机稳定"
     @Published private(set) var selectedPoints: [SIMD3<Float>] = []
     @Published private(set) var selectionRect: CGRect?
     @Published private(set) var pointCount = 0
@@ -32,21 +37,26 @@ final class MeasureViewModel: ObservableObject {
     @Published var showDebugOverlay = false
 
     private let raycastService = RaycastService.self
-    private let visionPipeline = VisionPipeline()
-    private var smoother = MeasurementSmoother()
     private var dragStart: CGPoint?
     private var viewportSize: CGSize = .zero
-    private var lastProcessTime: TimeInterval = 0
-    private let processInterval: TimeInterval = 0.15
 
     var capabilities: DeviceCapabilities { sessionManager.capabilities }
 
+    /// 自动模式检测结果（Vision 左下原点归一化坐标）。
+    var detections: [DetectedObject] { autoCoordinator.detections }
+    var selectedObjectID: UUID? { autoCoordinator.selectedObjectID }
+    var autoState: AutoMeasureState { autoCoordinator.state }
+    var pipelineDebug: AutoMeasureCoordinator.PipelineDebug { autoCoordinator.debug }
+
     init() {
-        let stored = UserDefaults.standard.string(forKey: "measurement.unit")
-        unit = MeasurementUnit(rawValue: stored ?? "") ?? .centimeter
+        let defaults = UserDefaults.standard
+        unit = MeasurementUnit(rawValue: defaults.string(forKey: "measurement.unit") ?? "") ?? .centimeter
+        let storedThreshold = defaults.float(forKey: "detection.threshold")
+        detectionThreshold = storedThreshold > 0 ? storedThreshold : 0.35
         sessionManager.frameHandler = { [weak self] frame in
             self?.process(frame: frame)
         }
+        autoCoordinator.setThreshold(detectionThreshold)
         AppLog.measure.info("MeasureViewModel initialized")
     }
 
@@ -58,6 +68,33 @@ final class MeasureViewModel: ObservableObject {
         distanceMeters.map { unit.format($0) }
     }
 
+    /// 自动模式的用户可见状态文本。
+    var autoStatusText: String {
+        switch autoState {
+        case .searching: return "未检测到支持的目标，可点击框选"
+        case .detected: return "已识别目标，保持手机稳定"
+        case .measuring: return "测量中…保持手机稳定"
+        case .stabilizing: return "测量中…尺寸逐渐稳定"
+        case .locked: return "测量已锁定"
+        case .failed(let error): return error.message
+        }
+    }
+
+    var statusText: String {
+        if mode == .boxSelection, selectionRect == nil {
+            return "请拖框选择物体"
+        }
+        return mode.usesPointCloud ? autoStatusText : manualStatusText
+    }
+
+    /// 当前可保存的尺寸（自动模式取协调器平滑结果，手动取本地结果）。
+    var currentDimensionsForSave: MeasurementDimensions? {
+        if mode.usesPointCloud {
+            return autoCoordinator.dimensions
+        }
+        return dimensions
+    }
+
     func setViewportSize(_ size: CGSize) {
         viewportSize = size
     }
@@ -67,13 +104,13 @@ final class MeasureViewModel: ObservableObject {
     func handleTap(at location: CGPoint) {
         guard mode == .manualLength || mode == .manualDimensions else { return }
         guard let frame = sessionManager.lastFrame, let arView = sessionManager.arView else {
-            statusText = "AR 尚未就绪"
+            manualStatusText = "AR 尚未就绪"
             return
         }
         let point = raycastService.depthWorldPoint(at: location, in: arView, frame: frame)
             ?? raycastService.worldPoint(at: location, in: arView)
         guard let point else {
-            statusText = "未找到可测量的表面，请对准平面"
+            manualStatusText = "未找到可测量的表面，请对准平面"
             return
         }
         selectedPoints.append(point)
@@ -84,10 +121,10 @@ final class MeasureViewModel: ObservableObject {
                 distanceMeters = BoundingBox3D.distance(selectedPoints[0], selectedPoints[1])
                 dimensions = nil
                 renderer.showLine(from: selectedPoints[0], to: selectedPoints[1])
-                statusText = "长度已计算"
+                manualStatusText = "长度已计算"
                 AppLog.measure.info("Manual length: \(self.distanceMeters!) m")
             } else {
-                statusText = "已记录点 A，请点击点 B"
+                manualStatusText = "已记录点 A，请点击点 B"
             }
         } else {
             if selectedPoints.count > 4 { selectedPoints.removeFirst() }
@@ -103,12 +140,18 @@ final class MeasureViewModel: ObservableObject {
                     (selectedPoints[0], selectedPoints[2]),
                     (selectedPoints[0], selectedPoints[3])
                 ])
-                statusText = "长宽高已计算"
+                manualStatusText = "长宽高已计算"
                 AppLog.measure.info("Manual dimensions: \(width)m x \(height)m x \(depth)m")
             } else {
-                statusText = "依次点击：左下、右下、左上、后角（\(selectedPoints.count)/4）"
+                manualStatusText = "依次点击：左下、右下、左上、后角（\(selectedPoints.count)/4）"
             }
         }
+    }
+
+    /// 点击选择自动模式目标（tap 手势调用）。
+    func selectAutoTarget(at location: CGPoint) {
+        guard mode == .automatic else { return }
+        autoCoordinator.select(at: location, viewSize: viewportSize)
     }
 
     // MARK: - 框选
@@ -134,9 +177,9 @@ final class MeasureViewModel: ObservableObject {
         dragStart = nil
         if rect.width < 24 || rect.height < 24 {
             selectionRect = nil
-            statusText = "框太小，请重新框选"
+            manualStatusText = "框太小，请重新框选"
         } else {
-            statusText = "已框选区域，保持手机稳定"
+            manualStatusText = "已框选区域，保持手机稳定"
         }
     }
 
@@ -157,17 +200,19 @@ final class MeasureViewModel: ObservableObject {
         selectedPoints.removeAll()
         distanceMeters = nil
         dimensions = nil
-        detectionLabel = nil
         selectionRect = nil
-        smoother.reset()
         pointCount = 0
         renderer.clearAll()
-        statusText = "对准物体并保持手机稳定"
+        manualStatusText = "对准物体并保持手机稳定"
+        if mode.usesPointCloud {
+            autoCoordinator.reset()
+        }
     }
 
     func save() async {
-        guard distanceMeters != nil || dimensions != nil else {
-            statusText = "还没有可保存的测量结果"
+        let currentDimensions = currentDimensionsForSave
+        guard distanceMeters != nil || currentDimensions != nil else {
+            manualStatusText = "还没有可保存的测量结果"
             return
         }
         isSaving = true
@@ -184,7 +229,7 @@ final class MeasureViewModel: ObservableObject {
         let record = MeasurementRecord(
             date: Date(),
             mode: mode,
-            dimensions: dimensions ?? MeasurementDimensions(
+            dimensions: currentDimensions ?? MeasurementDimensions(
                 width: distanceMeters ?? 0, height: 0, depth: 0
             ),
             unit: unit,
@@ -193,7 +238,7 @@ final class MeasureViewModel: ObservableObject {
             quality: quality?.grade.rawValue
         )
         historyStore.append(record)
-        statusText = "已保存到测量历史"
+        manualStatusText = "已保存到测量历史"
         AppLog.measure.info("Measurement saved: \(record.primaryText)")
     }
 
@@ -202,16 +247,16 @@ final class MeasureViewModel: ObservableObject {
     func startRoomScan() {
         guard mode == .roomScan else { return }
         roomPlanService.start()
-        statusText = "正在扫描房间，缓慢移动手机"
+        manualStatusText = "正在扫描房间，缓慢移动手机"
     }
 
     func stopRoomScan() {
         roomPlanService.stop()
         if let first = roomPlanService.measurements.first {
             dimensions = first.dimensions
-            statusText = "已识别物体：\(first.category)"
+            manualStatusText = "已识别物体：\(first.category)"
         } else {
-            statusText = "房间扫描已停止"
+            manualStatusText = "房间扫描已停止"
         }
     }
 
@@ -233,73 +278,31 @@ final class MeasureViewModel: ObservableObject {
 
     private func process(frame: ARFrame) {
         guard mode.usesPointCloud else { return }
-        let now = ProcessInfo.processInfo.systemUptime
-        guard now - lastProcessTime >= processInterval else { return }
-        lastProcessTime = now
+        autoCoordinator.setTrackingLimited(sessionManager.isTrackingLimited)
 
-        guard let sample = DepthReader.centerSample(from: frame) else {
-            statusText = capabilities.sceneDepthAvailable
-                ? "正在等待深度数据"
-                : "当前设备不支持 LiDAR，自动三维测量受限"
-            return
-        }
-
-        let vision = mode == .automatic ? visionPipeline.analyze(frame: frame) : nil
-        if let observation = vision?.observation {
-            detectionLabel = observation.identifier
-        }
-
-        let roi: CGRect?
+        let target: MeasureTarget?
         if mode == .boxSelection {
-            roi = normalizedSelectionRect()
-        } else if let box = vision?.observation?.boundingBox {
-            // Vision 左下原点 → 深度图左上原点。
-            roi = CGRect(x: box.minX, y: 1 - box.maxY, width: box.width, height: box.height)
+            guard let rect = normalizedSelectionRect() else {
+                autoCoordinator.reset()
+                manualStatusText = "请拖框选择物体"
+                return
+            }
+            target = .roi(rect)
         } else {
-            roi = CGRect(x: 0.2, y: 0.2, width: 0.6, height: 0.6)
+            target = nil
         }
-        guard let roi else {
-            statusText = "请拖框选择物体"
-            return
+        Task { [weak self] in
+            guard let self else { return }
+            await self.autoCoordinator.process(frame: frame, target: target)
+            self.pointCount = self.autoCoordinator.debug.pointCount
+            self.quality = self.autoCoordinator.quality
+            if self.autoCoordinator.state == .locked, let dims = self.autoCoordinator.dimensions {
+                self.dimensions = dims
+            }
+            if let obb = self.autoCoordinator.lastOBB {
+                self.renderer.showBoundingBox(obb)
+            }
         }
-
-        let tolerance: Float = sample.depth > 0.25 ? 0.1 : 0.05
-        let band = max(0, sample.depth - tolerance)...(sample.depth + tolerance)
-        let rawPoints = PointCloudBuilder.build(from: frame, configuration: .init(
-            stride: 5,
-            minimumConfidence: 0.5,
-            depthBand: band,
-            roi: roi,
-            foregroundMask: vision?.foregroundMask
-        ))
-        let points = BoundingBox3D.filterOutliers(rawPoints)
-        pointCount = points.count
-
-        guard let box = BoundingBox3D.orientedBoundingBox(
-            of: points.map(\.value),
-            gravity: SIMD3(0, 1, 0)
-        ) else {
-            statusText = "有效点太少，请靠近物体或框选"
-            quality = MeasurementQualityEvaluator.evaluate(
-                trackingLimited: sessionManager.isTrackingLimited,
-                depthConfidence: sample.confidence,
-                pointCount: points.count,
-                distanceMeters: sample.depth,
-                stability: smoother.stabilityScore
-            )
-            return
-        }
-
-        dimensions = smoother.add(box.dimensions)
-        statusText = smoother.isStable ? "测量稳定" : "请保持手机稳定"
-        quality = MeasurementQualityEvaluator.evaluate(
-            trackingLimited: sessionManager.isTrackingLimited,
-            depthConfidence: sample.confidence,
-            pointCount: points.count,
-            distanceMeters: sample.depth,
-            stability: smoother.stabilityScore
-        )
-        renderer.showBoundingBox(box)
     }
 
     private func normalizedSelectionRect() -> CGRect? {
