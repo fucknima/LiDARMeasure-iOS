@@ -1,7 +1,10 @@
 """打印导出模型的输入输出规格，供 Swift 端对齐。"""
+import sys
+
 import coremltools as ct
 
-model = ct.models.MLModel("ObjectDetector.mlpackage")
+path = sys.argv[1] if len(sys.argv) > 1 else "ObjectDetector.mlpackage"
+model = ct.models.MLModel(path)
 spec = model.get_spec()
 print("[inspect] model loaded")
 for input_ in spec.description.input:

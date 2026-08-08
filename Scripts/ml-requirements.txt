@@ -1,0 +1,7 @@
+# YOLO26m-seg CoreML 导出依赖（已验证组合，不要随意升级）
+# 验证日期：2026-08-08（macos-15 arm64, Python 3.12）
+ultralytics==8.4.116
+coremltools==9.0
+numpy<=2.3.5
+protobuf>=4.25.1
+pillow
