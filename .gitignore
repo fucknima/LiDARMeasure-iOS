@@ -26,3 +26,6 @@ Payload/
 .idea/
 .vscode/
 Thumbs.db
+
+# ML weights
+*.pt
