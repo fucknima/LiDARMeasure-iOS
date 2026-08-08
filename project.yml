@@ -31,9 +31,11 @@ targets:
       - name: Compile CoreML model
         basedOnDependencyAnalysis: false
         script: |
+          set -eux
+          mkdir -p "${CONFIGURATION_TEMP_DIR}/ml"
           xcrun coremlcompiler compile "${SRCROOT}/LiDARMeasure/ML/ObjectSegmenter.mlpackage" "${CONFIGURATION_TEMP_DIR}/ml"
-          rm -rf "${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ObjectDetector.mlmodelc"
-          cp -R "${CONFIGURATION_TEMP_DIR}/ml/ObjectDetector.mlmodelc" "${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/"
+          rm -rf "${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ObjectSegmenter.mlmodelc"
+          cp -R "${CONFIGURATION_TEMP_DIR}/ml/ObjectSegmenter.mlmodelc" "${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lidarmeasure.app
