@@ -24,6 +24,11 @@ jobs:
           if ! command -v xcodegen >/dev/null 2>&1; then brew install xcodegen; fi
           xcodegen generate
 
+      - name: Verify model present in repo
+        run: |
+          test -e LiDARMeasure/ML/ObjectDetector.mlpackage
+          echo "model present"
+
       - name: Run unit tests
         run: |
           xcodebuild test \

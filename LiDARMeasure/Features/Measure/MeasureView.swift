@@ -40,9 +40,18 @@ struct MeasureView: View {
                 }
             }
             .onEnded { value in
-                if viewModel.mode == .boxSelection {
+                switch viewModel.mode {
+                case .boxSelection:
                     viewModel.endSelection()
-                } else if viewModel.mode == .manualLength || viewModel.mode == .manualDimensions {
+                case .automatic:
+                    let distance = hypot(
+                        value.location.x - gestureStart.x,
+                        value.location.y - gestureStart.y
+                    )
+                    if distance < 10 {
+                        viewModel.selectAutoTarget(at: value.location)
+                    }
+                case .manualLength, .manualDimensions:
                     let distance = hypot(
                         value.location.x - gestureStart.x,
                         value.location.y - gestureStart.y
@@ -50,6 +59,8 @@ struct MeasureView: View {
                     if distance < 10 {
                         viewModel.handleTap(at: value.location)
                     }
+                case .roomScan:
+                    break
                 }
             }
     }
@@ -64,6 +75,7 @@ struct MeasureView: View {
                     Spacer()
                     centerHint
                     Spacer()
+                    detectionOverlay(in: proxy.size)
                     if viewModel.showDebugOverlay {
                         debugOverlay
                     }
@@ -88,6 +100,43 @@ struct MeasureView: View {
                 viewModel.setViewportSize(newSize)
             }
         }
+    }
+
+    /// 真实检测框：选中目标绿色，其余白色，标注中文类别与置信度。
+    private func detectionOverlay(in size: CGSize) -> some View {
+        Group {
+            if viewModel.mode == .automatic, !viewModel.detections.isEmpty {
+                ForEach(viewModel.detections) { object in
+                    let viewBox = VisionCoordinateMapper.viewBox(
+                        from: VisionCoordinateMapper.topLeft(object.boundingBox),
+                        in: size
+                    )
+                    let isSelected = object.id == viewModel.selectedObjectID
+                    Rectangle()
+                        .stroke(isSelected ? Color.green : Color.white.opacity(0.8), lineWidth: isSelected ? 2.5 : 1.5)
+                        .frame(width: viewBox.width, height: viewBox.height)
+                        .position(x: viewBox.midX, y: viewBox.midY)
+                        .overlay(alignment: .top) {
+                            Text(labelText(for: object, isSelected: isSelected))
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.black)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(isSelected ? Color.green : Color.white.opacity(0.85))
+                                .cornerRadius(4)
+                                .offset(y: -2)
+                        }
+                }
+            }
+        }
+    }
+
+    private func labelText(for object: DetectedObject, isSelected: Bool) -> String {
+        let name = COCOLabelTranslator.translate(object.label)
+        if viewModel.showDebugOverlay || isSelected {
+            return "\(name) \(Int(object.confidence * 100))%"
+        }
+        return name
     }
 
     private var topBar: some View {
@@ -131,11 +180,22 @@ struct MeasureView: View {
     }
 
     private var debugOverlay: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        let debug = viewModel.pipelineDebug
+        return VStack(alignment: .leading, spacing: 2) {
+            Text("Detector: \(debug.detectorOn ? "ON" : "OFF")")
+            Text("Objects: \(debug.objectCount)")
+            if let label = debug.selectedLabel {
+                Text("Selected: \(COCOLabelTranslator.translate(label)) \(debug.selectedConfidence.map { String(format: "%.2f", $0) } ?? "-")")
+            }
+            Text("Mask: \(debug.hasMask ? "YES" : "NO")")
+            Text("Depth: \(debug.hasDepth ? "YES" : "NO")")
+            Text(String(format: "Valid depth: %.0f%%", debug.validDepthRatio * 100))
+            Text("Points: \(debug.pointCount)")
+            Text("OBB: \(debug.hasOBB ? "YES" : "NO")")
+            if let formatted = viewModel.formattedDimensions {
+                Text("Size: \(formatted)")
+            }
             Text("Tracking: \(viewModel.sessionManager.trackingState)")
-            Text("Depth: \(viewModel.sessionManager.depthAvailable ? "yes" : "no")")
-            Text("Points: \(viewModel.pointCount)")
-            Text("Label: \(viewModel.detectionLabel ?? "-")")
             if let quality = viewModel.quality {
                 Text("Quality: \(quality.grade.rawValue) (\(String(format: "%.2f", quality.score)))")
             }
@@ -220,7 +280,7 @@ struct MeasureView: View {
             } label: {
                 Label("保存", systemImage: "square.and.arrow.down")
             }
-            .disabled(viewModel.isSaving || (viewModel.distanceMeters == nil && viewModel.dimensions == nil))
+            .disabled(viewModel.isSaving || (viewModel.distanceMeters == nil && viewModel.currentDimensionsForSave == nil))
         }
         .font(.subheadline)
         .buttonStyle(.bordered)

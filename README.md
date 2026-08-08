@@ -1,24 +1,24 @@
 # LiDARMeasure
 
-基于 ARKit / RealityKit / RoomPlan / Vision 的 iOS 智能物体尺寸测量 App。
+基于 ARKit / RealityKit / RoomPlan / Vision / CoreML 的 iOS 智能物体尺寸测量 App。
 
 打开 App → 摄像头进入 AR 模式 → 自动识别物体 → 利用 LiDAR / SceneDepth 深度数据构建点云 → 计算并显示 宽 / 高 / 深。
 
 ## 功能
 
-- **自动模式**：Vision 显著性检测 + 前景实例分割（iOS 17 内置能力，无模型体积）→ SceneDepth 点云 → 深度带过滤背景 → 重力对齐 OBB → 实时显示宽/高/深
-- **框选模式**：手指拖框圈住物体，App 在 ROI 内用深度聚类计算尺寸
-- **手动长度**：点击 A、B 两点，世界坐标距离
-- **手动长宽高**：依次点击左下、右下、左上、后角，计算宽/高/深
+- **自动识别**：CoreML YOLOv8n 真实目标检测（COCO 80 类，模型内置 NMS）→ 检测框 + 类别 + 置信度
+- **实例分割匹配**：Vision 前景实例分割，按 IoU 匹配 YOLO 检测框对应的实例，FinalMask = 检测框 ∩ 实例掩码
+- **目标跟踪**：IoU + 类别 + 中心距离跨帧关联，保持稳定 ID；点击检测框可锁定目标
+- **深度直方图前景分离**：ROI 内深度直方图 dominant peak 动态确定前景深度带，不固定 ±10cm
+- **重力对齐 OBB**：Y 轴 = 高度，水平面 2D PCA 求长/宽，1%~99% percentile 裁剪离群点
+- **时间稳定 + 自动锁定**：最近 12 帧中位数平滑，三轴变化 <3% 持续 8 帧后锁定
+- **自动测量状态机**：searching → detected → measuring → stabilizing → locked / failed，各阶段给出明确提示
+- **智能框选**：YOLO 不认识的物体（纸箱、工控柜等），拖框 + 前景分割 + 深度聚类测量
+- **手动长度 / 手动长宽高**：点选测距，YOLO 不可用时的兜底
 - **RoomPlan 引擎**：LiDAR 设备上直接复用系统识别的物体类别、dimensions、transform
-- **测量稳定器**：最近 15 帧中位数平滑，变化 < 2% 且持续数帧后显示「测量稳定」
-- **质量评分**：综合 Tracking、深度置信度、有效点数、距离、稳定度 → 优秀/良好/较差
-- **测量历史**：Codable + JSON 保存日期、模式、尺寸、单位、质量、截图路径
-- **截图保存**：写入 Documents 并申请 Photos add-only 权限保存到图库
-- **单位切换**：mm / cm / m / inch，默认 cm，内部统一米
-- **设备能力检测**：全部通过 API capability 判断，不依赖机型
-- **校准测试**：输入已知真实尺寸，显示测量误差百分比（不自动修改比例）
-- **Debug 覆盖层**：Tracking / Depth / 点数 / 检测标签 / 质量
+- **Debug 覆盖层**：Detector / Objects / Selected / Mask / Depth / Valid depth / Points / OBB / Size
+- **检测阈值**：设置页可调 0.2~0.8（默认 0.35）
+- 测量历史（JSON）、截图（Documents + Photos）、单位 mm/cm/m/inch、校准测试、能力检测
 
 ## 支持设备
 
@@ -56,19 +56,28 @@ LiDARMeasure
 ├── App            # 入口、Tab
 ├── Models         # 测量模型、单位、模式、能力
 ├── Features       # Measure / History / Settings
-├── AR             # ARSessionManager / DepthReader / RaycastService / PointCloudBuilder / ARRenderer
-├── Vision         # ObjectDetector / ObjectSegmenter / VisionPipeline
-├── Geometry       # RobustStatistics / BoundingBox3D(OBB) / MeasurementSmoother
+├── AR             # ARSessionManager / DepthReader / DepthCoordinateMapper / PointCloudBuilder / RaycastService / ARRenderer
+├── Vision         # ObjectDetector(VNCoreMLRequest) / ObjectSegmenter / ObjectTracker / VisionInferenceService / 坐标映射 / COCO 翻译
+├── Measurement    # AutoMeasureCoordinator / AutoMeasureState / DimensionStabilizer
+├── Geometry       # RobustStatistics / GravityAlignedOBB / PCA2D / BoundingBox3D
 ├── RoomPlan       # RoomPlanService
-├── Services       # CapabilityService / HistoryStore / ScreenshotService / UnitSettings
+├── Services       # CapabilityService / HistoryStore / ScreenshotService
 └── Utilities      # AppLog (OSLog)
 ```
 
-MVVM + Services，矩阵/统计计算使用 `simd` 与 `Accelerate`（vDSP）。
+MVVM + Services + Coordinator，矩阵/统计计算使用 `simd` 与 `Accelerate`（vDSP）。
+
+## 模型与许可证
+
+- 检测模型：Ultralytics YOLOv8n（COCO 80 类，含 NMS），`LiDARMeasure/ML/ObjectDetector.mlpackage`
+- 模型许可证：**AGPL-3.0**（权重与代码）。嵌入本模型后对外分发需按 AGPL-3.0 提供源码；
+  若未来需闭源上架，必须替换为宽松许可证模型。详见 `MODEL_INFO.md` 与 `THIRD_PARTY_NOTICES.md`
+- 模型导出：macOS（含 GitHub Actions workflow），见 `Scripts/export_model.py`
 
 ## 开源依赖与许可
 
-本仓库未复制第三方开源项目源代码，全部核心能力来自 Apple SDK。调研过的 GitHub 项目与 Apple Sample 记录在 `THIRD_PARTY_NOTICES.md`。
+- 检测模型 YOLOv8n 为 AGPL-3.0（见 `MODEL_INFO.md`、`THIRD_PARTY_NOTICES.md`）
+- 其余核心能力全部来自 Apple SDK，无第三方代码复用
 
 ## 测量限制
 
@@ -84,17 +93,22 @@ ARKit / LiDAR 是辅助测量工具，精度受以下因素影响：
 ## 已知问题
 
 - Windows 环境无 Xcode/Swift，编译与 IPA 由 macOS CI 完成；最终精度需 LiDAR 真机验证
-- 自动模式使用系统内置显著性/分类（非专用目标检测模型），未知物体会落入「框选 + 深度聚类」fallback
+- YOLO 检测框 / 实例掩码 / 深度图的坐标系对齐需真机验证（Vision 输出为旋转后图像归一化坐标）
 - RoomPlan 类别为系统枚举字符串，后续可补充本地化映射
-- 深度像素↔屏幕坐标的 displayTransform 换算、前景掩码与深度图的坐标系对齐需真机验证
+- COCO 模型不识别纸箱、工控柜等工业物体 → 使用智能框选模式
+- 自动模式输出为基于可见 LiDAR 点云的**估算尺寸**，不是 CAD 精确尺寸
+
+## 测试记录
+
+真实设备测量记录见 `MEASUREMENT_TESTS.md`。
 
 ## Roadmap
 
-1. LiDAR 真机验证：RoomPlan 类别、坐标转换、OBB 方向、校准测试记录
-2. 可选 CoreML 目标检测模型（YOLO/Ultralytics 导出，检查体积与许可证）
+1. LiDAR 真机验证：检测框对齐、RoomPlan 类别、OBB 方向、校准测试记录
+2. 评估 YOLOv8n vs YOLOv8s 精度/速度，必要时按设备动态选择模型
 3. 网格重建展示与 OBJ 导出
 4. 历史记录 UI 截图缩略图
-5. iPad 适配
+5. 若需闭源上架：替换 AGPL 模型为宽松许可证模型（如 YOLOX-nano）
 
 ## 项目状态
 

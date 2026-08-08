@@ -1,45 +1,42 @@
 import CoreGraphics
+import CoreML
 import CoreVideo
 import Foundation
 import Vision
 
-struct VisionObservation {
-    let identifier: String
-    let confidence: Float
-    /// 归一化坐标，原点在左下角（Vision 坐标系）。
-    let boundingBox: CGRect
-}
-
-/// 目标检测：优先显著性目标（无需模型，系统内置），回退分类请求。
+/// 真实目标检测：YOLOv8n CoreML（raw 输出 [1,84,8400]，App 内 decode + NMS）。
+///
+/// VNCoreMLRequest 负责 YUV→RGB 与 640x640 缩放（.scaleFill，归一化坐标不变），
+/// 输出 raw feature 由 YOLODecoder 解码。
 final class ObjectDetector {
+    private let request: VNCoreMLRequest
+
+    init?() {
+        let configuration = MLModelConfiguration()
+        configuration.computeUnits = .all
+        guard let url = Bundle.main.url(forResource: "ObjectDetector", withExtension: "mlmodelc"),
+              let mlModel = try? MLModel(contentsOf: url, configuration: configuration),
+              let visionModel = try? VNCoreMLModel(for: mlModel) else {
+            AppLog.vision.error("ObjectDetector model load failed")
+            return nil
+        }
+        let request = VNCoreMLRequest(model: visionModel)
+        request.imageCropAndScaleOption = .scaleFill
+        self.request = request
+        AppLog.vision.info("ObjectDetector initialized (YOLOv8n raw)")
+    }
+
     func detect(
         pixelBuffer: CVPixelBuffer,
-        orientation: CGImagePropertyOrientation = .right
-    ) throws -> VisionObservation? {
+        orientation: CGImagePropertyOrientation,
+        threshold: Float
+    ) throws -> [DetectedObject] {
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: orientation)
-
-        let saliencyRequest = VNGenerateObjectnessBasedSaliencyImageRequest()
-        try handler.perform([saliencyRequest])
-        if let saliency = saliencyRequest.results?.first,
-           let object = saliency.salientObjects?.first,
-           object.confidence > 0.2 {
-            return VisionObservation(
-                identifier: "目标",
-                confidence: object.confidence,
-                boundingBox: object.boundingBox
-            )
+        try handler.perform([request])
+        guard let observations = request.results as? [VNCoreMLFeatureValueObservation],
+              let multiArray = observations.first?.featureValue.multiArrayValue else {
+            return []
         }
-
-        let classifyRequest = VNClassifyImageRequest()
-        try handler.perform([classifyRequest])
-        if let classification = classifyRequest.results?.first(where: { $0.confidence > 0.2 }) {
-            return VisionObservation(
-                identifier: classification.identifier,
-                confidence: classification.confidence,
-                // 分类不携带区域，整幅画面作为 fallback 区域。
-                boundingBox: CGRect(x: 0, y: 0, width: 1, height: 1)
-            )
-        }
-        return nil
+        return YOLODecoder.decode(multiArray, threshold: threshold)
     }
 }
