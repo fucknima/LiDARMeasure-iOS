@@ -140,10 +140,9 @@ struct MeasureView: View {
     /// 坐标 Debug：绿色 YOLO box、蓝色 Mask bounds、黄色 Depth ROI（任务书第 39 条）。
     private func coordinateDebugOverlay(in size: CGSize) -> some View {
         Group {
-            guard let transform = viewModel.sessionManager.lastFrame.map({
+            if let transform = viewModel.sessionManager.lastFrame.map({
                 $0.displayTransform(for: .portrait, viewportSize: size)
-            }) else { return EmptyView() }
-            if let selected = viewModel.selectedObject {
+            }), let selected = viewModel.selectedObject {
                 let yoloBox = CoordinateMapper.viewBox(bottomLeft: selected.boundingBox, transform: transform)
                 let maskBox = ObjectSegmenter.maskBoundingBox(selected.mask)
                 let maskBounds = CoordinateMapper.viewBox(
