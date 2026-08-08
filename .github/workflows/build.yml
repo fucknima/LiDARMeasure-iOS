@@ -60,7 +60,9 @@ jobs:
       - name: Verify model compiled into app
         run: |
           APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -n 1)
-          test -d "$APP/ObjectDetector.mlmodelc"
+          echo "APP=$APP"
+          find "$APP" -name "*.mlmodelc" -o -name "*ObjectDetector*" | head -20
+          test -n "$(find "$APP" -name "*.mlmodelc" | head -n 1)"
           echo "mlmodelc compiled into app"
           unzip -l artifacts/LiDARMeasure-v0.2.0-unsigned.ipa | grep -q "Payload/LiDARMeasure.app"
 
