@@ -16,7 +16,10 @@ enum ObjectSegmenter {
         let matchedIoU: Float
     }
 
-    /// 分割与 targetBox 交叠最大的单个前景实例。
+    /// 分割与 targetBox 交叠最大的前景实例。
+    ///
+    /// 实例 ID 必须来自 observation.allInstances（IndexSet），
+    /// 禁止把 observation 数组索引当作实例 ID。
     static func segmentInstance(
         pixelBuffer: CVPixelBuffer,
         orientation: CGImagePropertyOrientation,
@@ -29,26 +32,26 @@ enum ObjectSegmenter {
         )
         guard !observations.isEmpty else { return nil }
 
-        var bestIndex: Int?
         var bestIoU: Float = 0
         var bestMask: CVPixelBuffer?
-        for (index, observation) in observations.enumerated() {
-            let mask = try observation.generateScaledMaskForImage(
-                forInstances: IndexSet(integer: index),
-                from: handler
-            )
-            // mask 为左上原点像素数据，转为左下原点归一化后与检测框比 IoU。
-            let maskBox = maskBoundingBox(mask)
-            guard maskBox.width > 0 else { continue }
-            let boxBottomLeft = VisionCoordinateMapper.bottomLeft(maskBox)
-            let iou = BoxOps.intersectionOverUnion(boxBottomLeft, targetBox)
-            if iou > bestIoU {
-                bestIoU = iou
-                bestIndex = index
-                bestMask = mask
+        for observation in observations {
+            for instanceID in observation.allInstances {
+                let mask = try observation.generateScaledMaskForImage(
+                    forInstances: IndexSet(integer: instanceID),
+                    from: handler
+                )
+                // mask 为左上原点像素数据，转为左下原点归一化后与检测框比 IoU。
+                let maskBox = maskBoundingBox(mask)
+                guard maskBox.width > 0 else { continue }
+                let boxBottomLeft = VisionCoordinateMapper.bottomLeft(maskBox)
+                let iou = BoxOps.intersectionOverUnion(boxBottomLeft, targetBox)
+                if iou > bestIoU {
+                    bestIoU = iou
+                    bestMask = mask
+                }
             }
         }
-        guard let bestIndex, bestIoU >= minimumIoU, let bestMask else { return nil }
+        guard let bestMask, bestIoU >= minimumIoU else { return nil }
 
         let instanceBox = VisionCoordinateMapper.bottomLeft(maskBoundingBox(bestMask))
         return SegmentResult(mask: bestMask, instanceBox: instanceBox, matchedIoU: bestIoU)

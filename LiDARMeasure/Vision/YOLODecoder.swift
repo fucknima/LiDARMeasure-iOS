@@ -5,10 +5,14 @@ import CoreML
 /// YOLOv8 输出解码与 NMS（模型为 raw 输出，不含 NMS，这里使用成熟标准实现）。
 ///
 /// 模型输出形状 [1, 84, 8400]（channels-first）：
-/// - 前 4 通道：xywh（相对模型输入 640x640 的归一化中心坐标与尺寸）
-/// - 后 80 通道：COCO 类别分数（YOLOv8 无独立 objectness，类别分数即置信度）
+/// - 通道 0~3：xywh（相对模型输入 640x640 的归一化中心坐标与尺寸）
+/// - 通道 4~83：COCO 类别分数（YOLOv8 无独立 objectness，类别分数即置信度）
+///
+/// 注意 class 偏移：类别分数从通道 4 开始，类别索引 = 通道号 - 4。
 enum YOLODecoder {
     static let classCount = 80
+    /// xywh 占用通道数。
+    static let boxChannels = 4
 
     static func decode(
         _ array: MLMultiArray,
@@ -18,7 +22,7 @@ enum YOLODecoder {
         guard array.shape.count >= 2 else { return [] }
         let anchorCount = Int(array.shape[2])
         let channelCount = Int(array.shape[1])
-        guard anchorCount > 0, channelCount >= classCount + 4 else { return [] }
+        guard anchorCount > 0, channelCount >= classCount + boxChannels else { return [] }
 
         let pointer = array.dataPointer.bindMemory(to: Float.self, capacity: anchorCount * channelCount)
         let stride = anchorCount
@@ -36,11 +40,11 @@ enum YOLODecoder {
 
             var bestClass = 0
             var bestScore: Float = -1
-            for classIndex in 4..<channelCount {
+            for classIndex in boxChannels..<channelCount {
                 let score = pointer[anchor + stride * classIndex]
                 if score > bestScore {
                     bestScore = score
-                    bestClass = classIndex
+                    bestClass = classIndex - boxChannels
                 }
             }
             guard bestScore >= threshold else { continue }
