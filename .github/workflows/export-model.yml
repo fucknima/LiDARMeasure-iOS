@@ -22,7 +22,7 @@ jobs:
           python3 --version
           python3 -m venv mlvenv
           ./mlvenv/bin/pip install --upgrade pip -q
-          ./mlvenv/bin/pip install ultralytics coremltools -q
+          ./mlvenv/bin/pip install ultralytics "coremltools<9" -q
 
       - name: Export YOLO11n CoreML
         run: ./mlvenv/bin/python Scripts/export_model.py
