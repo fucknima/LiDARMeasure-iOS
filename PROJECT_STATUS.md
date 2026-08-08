@@ -3,7 +3,6 @@
 当前版本：`0.3.0`（build `3`）
 
 仓库：https://github.com/fucknima/LiDARMeasure-iOS
-分支：`feature/yolo26m-seg`（CI Green，待合并 master）
 
 ## v0.3.0 整改内容
 
@@ -41,7 +40,8 @@
 
 - [x] Export workflow 改名 `Export YOLO26m-seg CoreML`，依赖锁定
 - [x] Build/Release：模型存在检查 + mlmodelc 进包检查 + v0.3.0 IPA
-- [ ] 合并 master + tag v0.3.0 + Release 校验
+- [x] 合并 master、tag v0.3.0、Release 发布（IPA 21.8MB，含 ObjectSegmenter.mlmodelc 已验证）
+- [x] 清理：误提交的 .pt 权重已从历史移除；旧 ObjectDetector.mlpackage 已删除
 
 ## 模型许可证
 
