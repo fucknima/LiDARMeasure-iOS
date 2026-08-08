@@ -15,7 +15,7 @@ actor VisionInferenceService {
     private var isBusy = false
     private var lastRunTime: TimeInterval = 0
 
-    var isAvailable: Bool { detector != nil }
+    nonisolated let isAvailable: Bool
 
     init(interval: TimeInterval = 0.15) {
         self.interval = interval

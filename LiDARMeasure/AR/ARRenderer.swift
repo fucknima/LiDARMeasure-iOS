@@ -50,7 +50,7 @@ final class ARRenderer {
         }
     }
 
-    func showBoundingBox(_ box: OrientedBoundingBox, color: UIColor = .green) {
+    func showBoundingBox(_ box: GravityAlignedOBB, color: UIColor = .green) {
         guard let anchor else { return }
         clearAll()
         let material = SimpleMaterial(color: color, isMetallic: false)

@@ -58,10 +58,6 @@ final class AutoMeasureCoordinator: ObservableObject {
         }
     }
 
-    var selectedObject: DetectedObject? {
-        detections.first { $0.id == selectedObjectID }
-    }
-
     func reset() {
         tracker = ObjectTracker()
         stabilizer.reset()
@@ -110,8 +106,6 @@ final class AutoMeasureCoordinator: ObservableObject {
         defer { isProcessing = false }
 
         let pixelBuffer = frame.capturedImage
-        CVPixelBufferRetain(pixelBuffer)
-        defer { CVPixelBufferRelease(pixelBuffer) }
 
         // 检测目标与 ROI。
         let detectionTarget: DetectedObject?
@@ -235,7 +229,7 @@ final class AutoMeasureCoordinator: ObservableObject {
                 stability: 1
             )
         } else {
-            state = stabilizer.stableStreak > 0 ? .stabilizing : .measuring
+            state = stabilizer.stabilizationProgress > 0 ? .stabilizing : .measuring
         }
         if trackingLimited, state != .locked {
             state = .measuring

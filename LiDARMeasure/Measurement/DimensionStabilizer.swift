@@ -29,6 +29,9 @@ struct DimensionStabilizer {
 
     var isLocked: Bool { stableStreak >= lockFrameCount }
 
+    /// 当前连续稳定帧数（用于状态机区分 stabilizing / measuring）。
+    var stabilizationProgress: Int { stableStreak }
+
     @discardableResult
     mutating func add(_ dimensions: MeasurementDimensions) -> MeasurementDimensions {
         samples.append(dimensions)
