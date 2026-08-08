@@ -55,7 +55,7 @@ jobs:
             CODE_SIGN_IDENTITY=""
 
       - name: Package unsigned IPA
-        run: bash ./Scripts/package_unsigned_ipa.sh build 0.2.0
+        run: bash ./Scripts/package_unsigned_ipa.sh build 0.3.0
 
       - name: Verify model compiled into app
         run: |
@@ -72,5 +72,6 @@ jobs:
           name: LiDARMeasure-v0.3.0-unsigned-ipa
           path: artifacts/LiDARMeasure-v0.3.0-unsigned.ipa
           if-no-files-found: error
+
 
 
