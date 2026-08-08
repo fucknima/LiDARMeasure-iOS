@@ -27,8 +27,13 @@ targets:
           - ML
     resources:
       - path: LiDARMeasure/Supporting/Assets.xcassets
-      - path: LiDARMeasure/ML/ObjectDetector.mlpackage
-        explicitFileType: wrapper.mlpackage
+    preBuildScripts:
+      - name: Compile CoreML model
+        basedOnDependencyAnalysis: false
+        script: |
+          xcrun coremlcompiler compile "${SRCROOT}/LiDARMeasure/ML/ObjectDetector.mlpackage" "${CONFIGURATION_TEMP_DIR}/ml"
+          rm -rf "${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ObjectDetector.mlmodelc"
+          cp -R "${CONFIGURATION_TEMP_DIR}/ml/ObjectDetector.mlmodelc" "${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lidarmeasure.app
