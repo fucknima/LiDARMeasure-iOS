@@ -6,7 +6,8 @@ final class DetectorTests: XCTestCase {
     func testIntersectionOverUnion() {
         let a = CGRect(x: 0, y: 0, width: 0.5, height: 0.5)
         let b = CGRect(x: 0.25, y: 0, width: 0.5, height: 0.5)
-        XCTAssertEqual(BoxOps.intersectionOverUnion(a, b), 0.5, accuracy: 0.0001)
+        // 交集 0.125，并集 0.375 → IoU = 1/3。
+        XCTAssertEqual(BoxOps.intersectionOverUnion(a, b), 1.0 / 3.0, accuracy: 0.0001)
     }
 
     func testIoUZeroForDisjointBoxes() {

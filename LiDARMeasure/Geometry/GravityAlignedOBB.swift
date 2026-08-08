@@ -1,16 +1,12 @@
-import Foundation
+﻿import Foundation
 import simd
 
-/// 重力对齐 OBB。
-///
-/// - 高 = 重力方向（Y）的 percentile 范围
-/// - 长 / 宽 = 水平面（XZ）2D PCA 主轴，长 = 水平较长边
-/// - percentile 裁剪（默认 1%~99%）防止离群点把尺寸拉大
-struct GravityAlignedOBB {
+/// 閲嶅姏瀵归綈 OBB銆?///
+/// - 楂?= 閲嶅姏鏂瑰悜锛圷锛夌殑 percentile 鑼冨洿
+/// - 闀?/ 瀹?= 姘村钩闈紙XZ锛?D PCA 涓昏酱锛岄暱 = 姘村钩杈冮暱杈?/// - percentile 瑁佸壀锛堥粯璁?1%~99%锛夐槻姝㈢缇ょ偣鎶婂昂瀵告媺澶?struct GravityAlignedOBB {
     var center: SIMD3<Float>
     var axes: simd_float3x3
-    /// width = 水平较短边，height = 垂直高，depth = 水平较长边。
-    var dimensions: MeasurementDimensions
+    /// width = 姘村钩杈冪煭杈癸紝height = 鍨傜洿楂橈紝depth = 姘村钩杈冮暱杈广€?    var dimensions: MeasurementDimensions
     var corners: [SIMD3<Float>]
 
     static func compute(
@@ -21,6 +17,8 @@ struct GravityAlignedOBB {
     ) -> GravityAlignedOBB? {
         let valid = points.filter { $0.x.isFinite && $0.y.isFinite && $0.z.isFinite }
         guard valid.count >= 8 else { return nil }
+        // MAD 棰勮繃婊わ細绂荤兢鐐逛細姹℃煋 PCA 涓昏酱鏂瑰悜锛屽繀椤诲厛鍓旈櫎锛堜换鍔′功绗?37 鏉★級銆?        let cleaned = filterOutliersByDistance(valid)
+        guard cleaned.count >= 8 else { return nil }
 
         let up = normalized(gravity, fallback: SIMD3(0, 1, 0))
         let worldZ = SIMD3<Float>(0, 0, 1)
@@ -30,13 +28,12 @@ struct GravityAlignedOBB {
         let forward = normalized(projected, fallback: worldZ)
         let right = normalized(simd_cross(up, forward), fallback: worldX)
 
-        let yValues = valid.map(\.y)
+        let yValues = cleaned.map(\.y)
         let heightMin = percentile(yValues, fraction: lowerPercentile) ?? yValues.min() ?? 0
         let heightMax = percentile(yValues, fraction: upperPercentile) ?? yValues.max() ?? 0
         let height = max(0, heightMax - heightMin)
 
-        // 水平面投影 → 2D PCA。
-        let horizontal = valid.map { point -> SIMD2<Float> in
+        // 姘村钩闈㈡姇褰?鈫?2D PCA銆?        let horizontal = cleaned.map { point -> SIMD2<Float> in
             let delta = point - SIMD3(0, heightMin, 0)
             return SIMD2(simd_dot(delta, right), simd_dot(delta, forward))
         }
@@ -56,8 +53,7 @@ struct GravityAlignedOBB {
         let extentA = max(0, aMax - aMin)
         let extentB = max(0, bMax - bMin)
 
-        // 长 = 水平较长边。
-        let lengthAxis = extentA >= extentB ? horizontalA : horizontalB
+        // 闀?= 姘村钩杈冮暱杈广€?        let lengthAxis = extentA >= extentB ? horizontalA : horizontalB
         let widthAxis = extentA >= extentB ? horizontalB : horizontalA
         let length = max(extentA, extentB)
         let width = min(extentA, extentB)
@@ -101,8 +97,21 @@ struct GravityAlignedOBB {
         return sorted[index]
     }
 
+    /// 基于到点云中心距离的 MAD 离群过滤，防止离群点污染 PCA 主轴。
+    static func filterOutliersByDistance(_ points: [SIMD3<Float>], multiplier: Float = 3) -> [SIMD3<Float>] {
+        guard points.count >= 8 else { return points }
+        let center = points.reduce(SIMD3<Float>.zero, +) / Float(points.count)
+        let distances = points.map { simd_distance($0, center) }
+        guard let median = RobustStatistics.median(distances),
+              let mad = RobustStatistics.mad(distances),
+              mad > Float.ulpOfOne else { return points }
+        let limit = median + multiplier * 1.4826 * mad
+        return points.filter { simd_distance($0, center) <= limit }
+    }
+
     private static func normalized(_ value: SIMD3<Float>, fallback: SIMD3<Float>) -> SIMD3<Float> {
         let length = simd_length(value)
         return length > Float.ulpOfOne && length.isFinite ? value / length : fallback
     }
 }
+
