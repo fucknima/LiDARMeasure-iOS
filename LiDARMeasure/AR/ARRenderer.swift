@@ -24,7 +24,7 @@ final class ARRenderer {
         guard let anchor else { return }
         clearAll()
         let material = SimpleMaterial(color: color, isMetallic: false)
-        let line = ModelEntity(mesh: .generateLine(from: start, to: end, radius: 0.004), materials: [material])
+        let line = lineEntity(from: start, to: end, radius: 0.004, material: material)
         let startSphere = sphere(at: start, radius: 0.012, material: material)
         let endSphere = sphere(at: end, radius: 0.012, material: material)
         anchor.addChild(line)
@@ -44,7 +44,7 @@ final class ARRenderer {
             sphereEntities.append(entity)
         }
         for (start, end) in lines {
-            let entity = ModelEntity(mesh: .generateLine(from: start, to: end, radius: 0.003), materials: [material])
+            let entity = lineEntity(from: start, to: end, radius: 0.003, material: material)
             anchor.addChild(entity)
             lineEntities.append(entity)
         }
@@ -60,7 +60,7 @@ final class ARRenderer {
             (0, 4), (1, 5), (2, 6), (3, 7)
         ]
         for (a, b) in edges {
-            let entity = ModelEntity(mesh: .generateLine(from: box.corners[a], to: box.corners[b], radius: 0.004), materials: [material])
+            let entity = lineEntity(from: box.corners[a], to: box.corners[b], radius: 0.004, material: material)
             anchor.addChild(entity)
             lineEntities.append(entity)
         }
@@ -72,7 +72,6 @@ final class ARRenderer {
     }
 
     func clearAll() {
-        guard let anchor else { return }
         for entity in lineEntities + sphereEntities {
             entity.removeFromParent()
         }
@@ -83,6 +82,28 @@ final class ARRenderer {
     private func sphere(at position: SIMD3<Float>, radius: Float, material: SimpleMaterial) -> ModelEntity {
         let entity = ModelEntity(mesh: .generateSphere(radius: radius), materials: [material])
         entity.position = position
+        return entity
+    }
+
+    /// 用细长 Box 实体代替线段：RealityKit 无线段网格 API。
+    private func lineEntity(
+        from start: SIMD3<Float>,
+        to end: SIMD3<Float>,
+        radius: Float,
+        material: SimpleMaterial
+    ) -> ModelEntity {
+        let direction = end - start
+        let length = simd_length(direction)
+        guard length > 0.0001 else {
+            let fallback = sphere(at: start, radius: radius, material: material)
+            return fallback
+        }
+        let mesh = MeshResource.generateBox(
+            size: SIMD3<Float>(radius * 2, radius * 2, length),
+            cornerRadius: radius
+        )
+        let entity = ModelEntity(mesh: mesh, materials: [material])
+        entity.look(at: end, from: (start + end) / 2, relativeTo: nil)
         return entity
     }
 }

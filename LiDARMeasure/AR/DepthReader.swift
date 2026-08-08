@@ -22,22 +22,23 @@ enum DepthReader {
         guard width > 0, height > 0 else { return nil }
 
         CVPixelBufferLockBaseAddress(map, .readOnly)
-        if data.confidenceMap != nil {
-            CVPixelBufferLockBaseAddress(data.confidenceMap, .readOnly)
+        let confidenceMap = data.confidenceMap
+        if let confidenceMap {
+            CVPixelBufferLockBaseAddress(confidenceMap, .readOnly)
         }
         defer {
             CVPixelBufferUnlockBaseAddress(map, .readOnly)
-            if data.confidenceMap != nil {
-                CVPixelBufferUnlockBaseAddress(data.confidenceMap, .readOnly)
+            if let confidenceMap {
+                CVPixelBufferUnlockBaseAddress(confidenceMap, .readOnly)
             }
         }
         guard let base = CVPixelBufferGetBaseAddress(map) else { return nil }
         let rowStride = CVPixelBufferGetBytesPerRow(map) / MemoryLayout<Float32>.stride
         let values = base.assumingMemoryBound(to: Float32.self)
-        let confidenceValues = data.confidenceMap
+        let confidenceValues = confidenceMap
             .flatMap { CVPixelBufferGetBaseAddress($0) }
             .map { $0.assumingMemoryBound(to: UInt8.self) }
-        let confidenceStride = data.confidenceMap.map { CVPixelBufferGetBytesPerRow($0) } ?? 0
+        let confidenceStride = confidenceMap.map { CVPixelBufferGetBytesPerRow($0) } ?? 0
 
         var depths: [Float] = []
         var confidences: [Float] = []

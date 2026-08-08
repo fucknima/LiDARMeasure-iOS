@@ -23,7 +23,7 @@ final class ARSessionManager: NSObject, ObservableObject {
         super.init()
         session.delegate = self
         AppLog.ar.info(
-            "Capabilities: ar=\(capabilities.arKitAvailable), depth=\(capabilities.sceneDepthAvailable), smoothed=\(capabilities.smoothedSceneDepthAvailable), mesh=\(capabilities.meshReconstructionAvailable), roomPlan=\(capabilities.roomPlanAvailable)"
+            "Capabilities: ar=\(self.capabilities.arKitAvailable), depth=\(self.capabilities.sceneDepthAvailable), smoothed=\(self.capabilities.smoothedSceneDepthAvailable), mesh=\(self.capabilities.meshReconstructionAvailable), roomPlan=\(self.capabilities.roomPlanAvailable)"
         )
     }
 

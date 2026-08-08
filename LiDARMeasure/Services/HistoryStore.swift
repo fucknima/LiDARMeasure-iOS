@@ -26,7 +26,7 @@ final class HistoryStore: ObservableObject {
     func append(_ record: MeasurementRecord) {
         records.insert(record, at: 0)
         save()
-        AppLog.storage.info("History appended, total=\(records.count)")
+        AppLog.storage.info("History appended, total=\(self.records.count)")
     }
 
     func remove(_ record: MeasurementRecord) {
@@ -44,7 +44,7 @@ final class HistoryStore: ObservableObject {
         guard let data = try? Data(contentsOf: fileURL) else { return }
         do {
             records = try decoder.decode([MeasurementRecord].self, from: data)
-            AppLog.storage.info("History loaded, count=\(records.count)")
+            AppLog.storage.info("History loaded, count=\(self.records.count)")
         } catch {
             AppLog.storage.error("History load failed: \(error.localizedDescription, privacy: .public)")
         }

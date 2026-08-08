@@ -28,36 +28,38 @@ enum PointCloudBuilder {
         let scaleY = cameraImageHeight / Float(height)
 
         CVPixelBufferLockBaseAddress(map, .readOnly)
-        if depthData.confidenceMap != nil {
-            CVPixelBufferLockBaseAddress(depthData.confidenceMap, .readOnly)
+        let confidenceMap = depthData.confidenceMap
+        let foregroundMask = configuration.foregroundMask
+        if let confidenceMap {
+            CVPixelBufferLockBaseAddress(confidenceMap, .readOnly)
         }
-        if configuration.foregroundMask != nil {
-            CVPixelBufferLockBaseAddress(configuration.foregroundMask, .readOnly)
+        if let foregroundMask {
+            CVPixelBufferLockBaseAddress(foregroundMask, .readOnly)
         }
         defer {
             CVPixelBufferUnlockBaseAddress(map, .readOnly)
-            if depthData.confidenceMap != nil {
-                CVPixelBufferUnlockBaseAddress(depthData.confidenceMap, .readOnly)
+            if let confidenceMap {
+                CVPixelBufferUnlockBaseAddress(confidenceMap, .readOnly)
             }
-            if configuration.foregroundMask != nil {
-                CVPixelBufferUnlockBaseAddress(configuration.foregroundMask, .readOnly)
+            if let foregroundMask {
+                CVPixelBufferUnlockBaseAddress(foregroundMask, .readOnly)
             }
         }
         guard let base = CVPixelBufferGetBaseAddress(map) else { return [] }
         let rowStride = CVPixelBufferGetBytesPerRow(map) / MemoryLayout<Float32>.stride
         let values = base.assumingMemoryBound(to: Float32.self)
 
-        let confidenceValues = depthData.confidenceMap
+        let confidenceValues = confidenceMap
             .flatMap { CVPixelBufferGetBaseAddress($0) }
             .map { $0.assumingMemoryBound(to: UInt8.self) }
-        let confidenceStride = depthData.confidenceMap.map { CVPixelBufferGetBytesPerRow($0) } ?? 0
+        let confidenceStride = confidenceMap.map { CVPixelBufferGetBytesPerRow($0) } ?? 0
 
-        let maskValues = configuration.foregroundMask
+        let maskValues = foregroundMask
             .flatMap { CVPixelBufferGetBaseAddress($0) }
             .map { $0.assumingMemoryBound(to: UInt8.self) }
-        let maskWidth = configuration.foregroundMask.map { CVPixelBufferGetWidth($0) } ?? 0
-        let maskHeight = configuration.foregroundMask.map { CVPixelBufferGetHeight($0) } ?? 0
-        let maskStride = configuration.foregroundMask.map { CVPixelBufferGetBytesPerRow($0) } ?? 0
+        let maskWidth = foregroundMask.map { CVPixelBufferGetWidth($0) } ?? 0
+        let maskHeight = foregroundMask.map { CVPixelBufferGetHeight($0) } ?? 0
+        let maskStride = foregroundMask.map { CVPixelBufferGetBytesPerRow($0) } ?? 0
 
         let stride = max(1, configuration.stride)
         var points: [Point3D] = []

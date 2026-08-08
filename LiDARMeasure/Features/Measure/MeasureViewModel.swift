@@ -85,7 +85,7 @@ final class MeasureViewModel: ObservableObject {
                 dimensions = nil
                 renderer.showLine(from: selectedPoints[0], to: selectedPoints[1])
                 statusText = "长度已计算"
-                AppLog.measure.info("Manual length: \(distanceMeters!) m")
+                AppLog.measure.info("Manual length: \(self.distanceMeters!) m")
             } else {
                 statusText = "已记录点 A，请点击点 B"
             }
@@ -228,7 +228,7 @@ final class MeasureViewModel: ObservableObject {
             sessionManager.pause()
             startRoomScan()
         }
-        AppLog.measure.info("Mode changed: \(oldValue.rawValue) -> \(mode.rawValue)")
+        AppLog.measure.info("Mode changed: \(oldValue.rawValue) -> \(self.mode.rawValue)")
     }
 
     private func process(frame: ARFrame) {

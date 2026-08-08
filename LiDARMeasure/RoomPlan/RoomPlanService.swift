@@ -48,7 +48,7 @@ final class RoomPlanService: NSObject, ObservableObject, RoomCaptureSessionDeleg
         startWhenAttached = false
         session?.stop()
         isScanning = false
-        AppLog.roomPlan.info("RoomPlan capture stopped, objects=\(measurements.count)")
+        AppLog.roomPlan.info("RoomPlan capture stopped, objects=\(self.measurements.count)")
     }
 
     func captureSession(_ session: RoomCaptureSession, didUpdate room: CapturedRoom) {
@@ -87,7 +87,7 @@ final class RoomPlanService: NSObject, ObservableObject, RoomCaptureSessionDeleg
                 transform: object.transform
             )
         }
-        AppLog.roomPlan.info("RoomPlan updated, objects=\(measurements.count)")
+        AppLog.roomPlan.info("RoomPlan updated, objects=\(self.measurements.count)")
     }
 }
 
