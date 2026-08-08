@@ -102,16 +102,19 @@ struct MeasureView: View {
         }
     }
 
-    /// 真实检测框：选中目标绿色，其余白色，标注中文类别与置信度。
+    /// 真实检测框（绿色选中/白色未选）+ Debug 坐标验证 overlay（任务书第 39 条）。
     private func detectionOverlay(in size: CGSize) -> some View {
         Group {
             if viewModel.mode == .automatic, !viewModel.detections.isEmpty {
-                ForEach(viewModel.detections) { object in
-                    let viewBox = VisionCoordinateMapper.viewBox(
-                        from: VisionCoordinateMapper.topLeft(object.boundingBox),
-                        in: size
-                    )
-                    let isSelected = object.id == viewModel.selectedObjectID
+                let transform = viewModel.sessionManager.lastFrame.map {
+                    $0.displayTransform(for: .portrait, viewportSize: size)
+                }
+                ForEach(viewModel.tracks) { track in
+                    let object = track.object
+                    let isSelected = track.stableID == viewModel.selectedStableID
+                    let viewBox = transform.map {
+                        CoordinateMapper.viewBox(bottomLeft: object.boundingBox, transform: $0)
+                    } ?? CGRect.zero
                     Rectangle()
                         .stroke(isSelected ? Color.green : Color.white.opacity(0.8), lineWidth: isSelected ? 2.5 : 1.5)
                         .frame(width: viewBox.width, height: viewBox.height)
@@ -128,10 +131,46 @@ struct MeasureView: View {
                         }
                 }
             }
+            if viewModel.showCoordinateDebug, viewModel.mode == .automatic {
+                coordinateDebugOverlay(in: size)
+            }
         }
     }
 
-    private func labelText(for object: DetectedObject, isSelected: Bool) -> String {
+    /// 坐标 Debug：绿色 YOLO box、蓝色 Mask bounds、黄色 Depth ROI（任务书第 39 条）。
+    private func coordinateDebugOverlay(in size: CGSize) -> some View {
+        Group {
+            if let transform = viewModel.sessionManager.lastFrame.map({
+                $0.displayTransform(for: .portrait, viewportSize: size)
+            }), let selected = viewModel.selectedObject {
+                let yoloBox = CoordinateMapper.viewBox(bottomLeft: selected.boundingBox, transform: transform)
+                let maskBox = ObjectSegmenter.maskBoundingBox(selected.mask)
+                let maskBounds = CoordinateMapper.viewBox(
+                    bottomLeft: CoordinateMapper.bottomLeft(display: maskBox),
+                    transform: transform
+                )
+                let roi = CoordinateMapper.displaySpace(bottomLeft: selected.boundingBox)
+                let roiView = CoordinateMapper.viewBox(
+                    bottomLeft: CoordinateMapper.bottomLeft(display: roi),
+                    transform: transform
+                )
+                Rectangle()
+                    .stroke(Color.green, lineWidth: 2)
+                    .frame(width: yoloBox.width, height: yoloBox.height)
+                    .position(x: yoloBox.midX, y: yoloBox.midY)
+                Rectangle()
+                    .stroke(Color.blue, lineWidth: 2)
+                    .frame(width: maskBounds.width, height: maskBounds.height)
+                    .position(x: maskBounds.midX, y: maskBounds.midY)
+                Rectangle()
+                    .stroke(Color.yellow, lineWidth: 2)
+                    .frame(width: roiView.width, height: roiView.height)
+                    .position(x: roiView.midX, y: roiView.midY)
+            }
+        }
+    }
+
+    private func labelText(for object: SegmentedObject, isSelected: Bool) -> String {
         let name = COCOLabelTranslator.translate(object.label)
         if viewModel.showDebugOverlay || isSelected {
             return "\(name) \(Int(object.confidence * 100))%"
@@ -182,19 +221,27 @@ struct MeasureView: View {
     private var debugOverlay: some View {
         let debug = viewModel.pipelineDebug
         return VStack(alignment: .leading, spacing: 2) {
+            Text("Model: \(debug.modelName.isEmpty ? "-" : debug.modelName)")
+            Text(String(format: "Inference: %.0f ms", debug.inferenceMs))
             Text("Detector: \(debug.detectorOn ? "ON" : "OFF")")
             Text("Objects: \(debug.objectCount)")
             if let label = debug.selectedLabel {
                 Text("Selected: \(COCOLabelTranslator.translate(label)) \(debug.selectedConfidence.map { String(format: "%.2f", $0) } ?? "-")")
             }
+            Text("Track ID: \(debug.selectedTrackID ?? "-")")
             Text("Mask: \(debug.hasMask ? "YES" : "NO")")
+            Text(String(format: "Mask coverage: %.0f%%", debug.maskCoverage * 100))
             Text("Depth: \(debug.hasDepth ? "YES" : "NO")")
+            Text("Depth res: \(debug.depthResolution)")
             Text(String(format: "Valid depth: %.0f%%", debug.validDepthRatio * 100))
-            Text("Points: \(debug.pointCount)")
+            Text("Points raw: \(debug.rawPointCount)")
+            Text("Points filtered: \(debug.filteredPointCount)")
             Text("OBB: \(debug.hasOBB ? "YES" : "NO")")
             if let formatted = viewModel.formattedDimensions {
                 Text("Size: \(formatted)")
             }
+            Text("State: \(stateName(viewModel.autoState))")
+            Text("Thermal: \(debug.thermalState)")
             Text("Tracking: \(viewModel.sessionManager.trackingState)")
             if let quality = viewModel.quality {
                 Text("Quality: \(quality.grade.rawValue) (\(String(format: "%.2f", quality.score)))")
@@ -205,6 +252,19 @@ struct MeasureView: View {
         .padding(8)
         .background(Color.black.opacity(0.55))
         .cornerRadius(8)
+    }
+
+    private func stateName(_ state: AutoMeasureState) -> String {
+        switch state {
+        case .searching: return "SEARCHING"
+        case .detected: return "DETECTED"
+        case .segmenting: return "SEGMENTING"
+        case .collectingDepth: return "COLLECTING_DEPTH"
+        case .measuring: return "MEASURING"
+        case .stabilizing: return "STABILIZING"
+        case .locked: return "LOCKED"
+        case .failed: return "FAILED"
+        }
     }
 
     private var resultCard: some View {

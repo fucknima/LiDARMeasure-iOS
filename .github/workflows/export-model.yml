@@ -1,10 +1,14 @@
-name: Export CoreML Model
+name: Export YOLO26m-seg CoreML
 
 on:
   workflow_dispatch:
   push:
     paths:
-      - 'Scripts/export_model.py'
+      - 'Scripts/export_yolo26_seg.py'
+      - 'Scripts/smoke_test_coreml_seg.py'
+      - 'Scripts/test_coreml_output.py'
+      - 'Scripts/ml-requirements.txt'
+      - 'Tests/Fixtures/**'
       - '.github/workflows/export-model.yml'
 
 permissions:
@@ -20,27 +24,40 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          # runner 默认 Python 3.14 无 coremltools 二进制 wheel（源码构建缺 C++ 扩展），固定 3.12。
+          # runner 默认 Python 3.14 无 coremltools 二进制 wheel，固定 3.12。
           python-version: '3.12'
 
-      - name: Install dependencies
+      - name: Install dependencies (locked)
         run: |
-          python3 --version
           python3 -m venv mlvenv
           ./mlvenv/bin/pip install --upgrade pip -q
-          ./mlvenv/bin/pip install ultralytics coremltools -q
+          ./mlvenv/bin/pip install -r Scripts/ml-requirements.txt -q
+          ./mlvenv/bin/python -c "import ultralytics, coremltools; print('ultralytics', ultralytics.__version__, '| coremltools', coremltools.__version__)"
 
-      - name: Export YOLO11n CoreML
-        run: ./mlvenv/bin/python Scripts/export_model.py
+      - name: Export YOLO26m-seg CoreML (+ INT8 comparison, l-seg benchmark)
+        run: ./mlvenv/bin/python Scripts/export_yolo26_seg.py
 
-      - name: Verify model output
+      - name: Smoke test segmentation model
         run: |
-          ls -la ObjectDetector.mlpackage
-          ./mlvenv/bin/python Scripts/inspect_model.py
+          test -e ObjectSegmenter.mlpackage
+          ./mlvenv/bin/python Scripts/smoke_test_coreml_seg.py ObjectSegmenter.mlpackage
+          ./mlvenv/bin/python Scripts/test_coreml_output.py ObjectSegmenter.mlpackage Tests/Fixtures/coco_bus.jpg
+
+      - name: Verify model output structure
+        run: |
+          ls -la ObjectSegmenter.mlpackage
+          ./mlvenv/bin/python Scripts/inspect_model.py ObjectSegmenter.mlpackage
 
       - name: Upload model artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ObjectDetector-mlpackage
-          path: ObjectDetector.mlpackage
+          name: ObjectSegmenter-mlpackage
+          path: ObjectSegmenter.mlpackage
           if-no-files-found: error
+
+      - name: Upload l-seg benchmark artifact (optional)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ObjectSegmenter-L-mlpackage-benchmark
+          path: ObjectSegmenter-L.mlpackage
+          if-no-files-found: ignore

@@ -6,7 +6,7 @@ import UIKit
 
 /// 屏幕点 → 世界坐标。
 ///
-/// 优先使用深度图反投影（考虑 displayTransform 与相机内参），
+/// 优先使用深度图反投影（经 CoordinateMapper 统一坐标映射），
 /// 回退到平面 raycast，最后回退到相机高度水平面。
 enum RaycastService {
     static func depthWorldPoint(
@@ -21,14 +21,11 @@ enum RaycastService {
         let size = arView.bounds.size
         guard width > 0, height > 0, size.width > 0, size.height > 0 else { return nil }
 
-        // 视图归一化坐标 → 图像归一化坐标（displayTransform 是图像→视图，取逆）。
-        let displayTransform = frame.displayTransform(for: .portrait, viewportSize: size)
-        let viewToImage = displayTransform.inverted()
-        let normalizedView = CGPoint(x: viewPoint.x / size.width, y: viewPoint.y / size.height)
-        let normalizedImage = normalizedView.applying(viewToImage)
-        let px = Int(normalizedImage.x * CGFloat(width))
-        let py = Int(normalizedImage.y * CGFloat(height))
-        guard px >= 0, px < width, py >= 0, py < height else { return nil }
+        // 视图点 → 显示归一化（displayTransform 反解 + 原点翻转）。
+        let transform = frame.displayTransform(for: .portrait, viewportSize: size)
+        let displayPoint = CoordinateMapper.displayNormalized(viewPoint: viewPoint, transform: transform)
+        let depthSize = CGSize(width: width, height: height)
+        let pixel = CoordinateMapper.depthPixel(normalized: displayPoint, depthSize: depthSize)
 
         // 3x3 邻域取中位数深度，降低单像素噪声。
         CVPixelBufferLockBaseAddress(map, .readOnly)
@@ -37,8 +34,8 @@ enum RaycastService {
         let rowStride = CVPixelBufferGetBytesPerRow(map) / MemoryLayout<Float32>.stride
         let values = base.assumingMemoryBound(to: Float32.self)
         var candidates: [Float] = []
-        for y in max(0, py - 1)...min(height - 1, py + 1) {
-            for x in max(0, px - 1)...min(width - 1, px + 1) {
+        for y in max(0, pixel.y - 1)...min(height - 1, pixel.y + 1) {
+            for x in max(0, pixel.x - 1)...min(width - 1, pixel.x + 1) {
                 let depth = values[y * rowStride + x]
                 if depth.isFinite, depth > 0 { candidates.append(depth) }
             }
@@ -46,18 +43,9 @@ enum RaycastService {
         guard let depth = RobustStatistics.median(candidates) else { return nil }
 
         // 深度像素 → 相机坐标（内参缩放） → 世界坐标。
-        let cameraImageWidth = Float(CVPixelBufferGetWidth(frame.capturedImage))
-        let cameraImageHeight = Float(CVPixelBufferGetHeight(frame.capturedImage))
-        let intrinsics = frame.camera.intrinsics
-        let scaleX = cameraImageWidth / Float(width)
-        let scaleY = cameraImageHeight / Float(height)
-        let cameraPoint = SIMD3<Float>(
-            (Float(px) * scaleX - intrinsics.columns.2.x) / intrinsics.columns.0.x,
-            (Float(py) * scaleY - intrinsics.columns.2.y) / intrinsics.columns.1.y,
-            1
-        ) * depth
-        let world = frame.camera.transform * SIMD4(cameraPoint, 1)
-        return SIMD3(world.x, world.y, world.z)
+        let geometry = DepthCoordinateMapper.geometry(frame: frame, depthMap: map)
+        let world = DepthCoordinateMapper.worldPoint(x: pixel.x, y: pixel.y, depth: depth, geometry: geometry)
+        return world
     }
 
     static func worldPoint(at viewPoint: CGPoint, in arView: ARView) -> SIMD3<Float>? {

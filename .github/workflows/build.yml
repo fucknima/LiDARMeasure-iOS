@@ -1,4 +1,4 @@
-name: Build
+﻿name: Build
 
 on:
   push:
@@ -30,7 +30,7 @@ jobs:
 
       - name: Verify model present in repo
         run: |
-          test -e LiDARMeasure/ML/ObjectDetector.mlpackage
+          test -e LiDARMeasure/ML/ObjectSegmenter.mlpackage
           echo "model present"
 
       - name: Run unit tests
@@ -55,20 +55,23 @@ jobs:
             CODE_SIGN_IDENTITY=""
 
       - name: Package unsigned IPA
-        run: bash ./Scripts/package_unsigned_ipa.sh build 0.2.0
+        run: bash ./Scripts/package_unsigned_ipa.sh build 0.3.0
 
       - name: Verify model compiled into app
         run: |
           APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -n 1)
           echo "APP=$APP"
-          find "$APP" -name "*.mlmodelc" -o -name "*ObjectDetector*" | head -20
+          find "$APP" -name "*.mlmodelc" -o -name "*ObjectSegmenter*" | head -20
           test -n "$(find "$APP" -name "*.mlmodelc" | head -n 1)"
           echo "mlmodelc compiled into app"
-          unzip -l artifacts/LiDARMeasure-v0.2.0-unsigned.ipa | grep -q "Payload/LiDARMeasure.app"
+          unzip -l artifacts/LiDARMeasure-v0.3.0-unsigned.ipa | grep -q "Payload/LiDARMeasure.app"
 
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: LiDARMeasure-v0.2.0-unsigned-ipa
-          path: artifacts/LiDARMeasure-v0.2.0-unsigned.ipa
+          name: LiDARMeasure-v0.3.0-unsigned-ipa
+          path: artifacts/LiDARMeasure-v0.3.0-unsigned.ipa
           if-no-files-found: error
+
+
+

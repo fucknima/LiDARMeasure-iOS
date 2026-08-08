@@ -6,18 +6,19 @@
 
 ## 功能
 
-- **自动识别**：CoreML YOLOv8n 真实目标检测（COCO 80 类，模型内置 NMS）→ 检测框 + 类别 + 置信度
-- **实例分割匹配**：Vision 前景实例分割，按 IoU 匹配 YOLO 检测框对应的实例，FinalMask = 检测框 ∩ 实例掩码
-- **目标跟踪**：IoU + 类别 + 中心距离跨帧关联，保持稳定 ID；点击检测框可锁定目标
-- **深度直方图前景分离**：ROI 内深度直方图 dominant peak 动态确定前景深度带，不固定 ±10cm
-- **重力对齐 OBB**：Y 轴 = 高度，水平面 2D PCA 求长/宽，1%~99% percentile 裁剪离群点
-- **时间稳定 + 自动锁定**：最近 12 帧中位数平滑，三轴变化 <3% 持续 8 帧后锁定
-- **自动测量状态机**：searching → detected → measuring → stabilizing → locked / failed，各阶段给出明确提示
-- **智能框选**：YOLO 不认识的物体（纸箱、工控柜等），拖框 + 前景分割 + 深度聚类测量
-- **手动长度 / 手动长宽高**：点选测距，YOLO 不可用时的兜底
+- **自动识别**：CoreML YOLO26m-seg（COCO 80 类实例分割，INT8 量化，模型内置 NMS）→ 检测框 + 类别 + 置信度 + 实例 mask
+- **Mask 驱动 LiDAR 测量**：YOLO 实例 mask 直接裁剪 SceneDepth 点云，mask 内深度直方图 + percentile/valley 前景分离
+- **目标跟踪**：TrackedObject 跨帧稳定 ID（IoU + 类别 + 中心距离，容忍短暂丢失 ≤3 帧）；点击目标框锁定 stableID，禁止自动换目标
+- **统一坐标体系**：CoordinateMapper + FrameGeometry 统一 camera/view/depth/mask 转换（displayTransform 对齐），坐标 Debug 模式可视化验证
+- **重力对齐 OBB**：Y 轴 = 高度，水平面 2D PCA 求长/宽，MAD 预过滤 + 1%~99% percentile 裁剪
+- **时间稳定 + 自动锁定**：12 帧中位数平滑，三轴 <3% 持续 8 帧锁定；锁定后低频验证，偏差 >8% 自动解锁
+- **自动测量状态机**：searching → detected → segmenting → collectingDepth → measuring → stabilizing → locked / failed（分阶段错误提示）
+- **智能框选**：YOLO 不认识的物体（纸箱、工控柜等），拖框 + Apple 前景实例分割（allInstances 匹配）+ 深度聚类 fallback
+- **手动长度 / 手动长宽高**：点选测距，AI 不可用时的兜底
 - **RoomPlan 引擎**：LiDAR 设备上直接复用系统识别的物体类别、dimensions、transform
-- **Debug 覆盖层**：Detector / Objects / Selected / Mask / Depth / Valid depth / Points / OBB / Size
-- **检测阈值**：设置页可调 0.2~0.8（默认 0.35）
+- **热降频**：thermalState serious → 降推理频率；critical → 暂停高频识别并提示
+- **Debug 覆盖层**：Model / Inference ms / Objects / Selected / Track ID / Mask / Mask coverage / Depth / Valid depth / Points raw/filtered / OBB / Size / State / Thermal
+- **检测阈值**：设置页可调 0.15~0.80（默认 0.30）
 - 测量历史（JSON）、截图（Documents + Photos）、单位 mm/cm/m/inch、校准测试、能力检测
 
 ## 支持设备
@@ -57,7 +58,7 @@ LiDARMeasure
 ├── Models         # 测量模型、单位、模式、能力
 ├── Features       # Measure / History / Settings
 ├── AR             # ARSessionManager / DepthReader / DepthCoordinateMapper / PointCloudBuilder / RaycastService / ARRenderer
-├── Vision         # ObjectDetector(VNCoreMLRequest) / ObjectSegmenter / ObjectTracker / VisionInferenceService / 坐标映射 / COCO 翻译
+├── Vision         # CoreMLSegmenter(YOLO26m-seg) / YOLO26SegDecoder / ObjectTracker / CoordinateMapper / MLMultiArrayAccessor / COCO 翻译
 ├── Measurement    # AutoMeasureCoordinator / AutoMeasureState / DimensionStabilizer
 ├── Geometry       # RobustStatistics / GravityAlignedOBB / PCA2D / BoundingBox3D
 ├── RoomPlan       # RoomPlanService
@@ -69,14 +70,14 @@ MVVM + Services + Coordinator，矩阵/统计计算使用 `simd` 与 `Accelerate
 
 ## 模型与许可证
 
-- 检测模型：Ultralytics YOLOv8n（COCO 80 类，含 NMS），`LiDARMeasure/ML/ObjectDetector.mlpackage`
+- 检测模型：Ultralytics YOLO26m-seg（COCO 80 类实例分割，INT8，内置 NMS），`LiDARMeasure/ML/ObjectSegmenter.mlpackage`
 - 模型许可证：**AGPL-3.0**（权重与代码）。嵌入本模型后对外分发需按 AGPL-3.0 提供源码；
   若未来需闭源上架，必须替换为宽松许可证模型。详见 `MODEL_INFO.md` 与 `THIRD_PARTY_NOTICES.md`
-- 模型导出：macOS（含 GitHub Actions workflow），见 `Scripts/export_model.py`
+- 模型导出：macOS（含 GitHub Actions workflow），见 `Scripts/export_yolo26_seg.py`
 
 ## 开源依赖与许可
 
-- 检测模型 YOLOv8n 为 AGPL-3.0（见 `MODEL_INFO.md`、`THIRD_PARTY_NOTICES.md`）
+- 检测模型 YOLO26m-seg 为 AGPL-3.0（见 `MODEL_INFO.md`、`THIRD_PARTY_NOTICES.md`）；测试图（coco_bus.jpg / coco_person.jpg）来自 Ultralytics assets（AGPL-3.0）
 - 其余核心能力全部来自 Apple SDK，无第三方代码复用
 
 ## 测量限制
@@ -104,8 +105,8 @@ ARKit / LiDAR 是辅助测量工具，精度受以下因素影响：
 
 ## Roadmap
 
-1. LiDAR 真机验证：检测框对齐、RoomPlan 类别、OBB 方向、校准测试记录
-2. 评估 YOLOv8n vs YOLOv8s 精度/速度，必要时按设备动态选择模型
+1. LiDAR 真机验证：检测框/mask/Depth ROI 三层 overlay 对齐、OBB 方向、校准测试记录
+2. 真机 Benchmark YOLO26m-seg vs l-seg（见 `BENCHMARK.md`），数据充分前保持 m-seg
 3. 网格重建展示与 OBJ 导出
 4. 历史记录 UI 截图缩略图
 5. 若需闭源上架：替换 AGPL 模型为宽松许可证模型（如 YOLOX-nano）
