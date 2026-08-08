@@ -30,7 +30,7 @@ def main():
     total_detections = 0
     for fixture in FIXTURES:
         print(f"[smoke] infer: {fixture}")
-        image = Image.open(fixture).convert("RGB")
+        image = Image.open(fixture).convert("RGB").resize((640, 640))
         out = model.predict({input_name: image})
 
         det_key = None

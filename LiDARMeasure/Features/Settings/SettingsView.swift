@@ -42,6 +42,7 @@ struct SettingsView: View {
 
                 Section("调试") {
                     Toggle("Debug 覆盖层", isOn: $viewModel.showDebugOverlay)
+                    Toggle("坐标 Debug（绿框/蓝 Mask/黄 ROI）", isOn: $viewModel.showCoordinateDebug)
                 }
 
                 Section("校准测试") {

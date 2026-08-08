@@ -27,7 +27,7 @@ def main():
         print(f"[check] OUTPUT {out.name} {out.type}")
 
     print(f"[check] loading image: {IMAGE_PATH}")
-    image = Image.open(IMAGE_PATH).convert("RGB")
+    image = Image.open(IMAGE_PATH).convert("RGB").resize((640, 640))
     print(f"[check] image size: {image.size}")
 
     # 按 spec 构造输入：image 输入需要 dict(name: image)。

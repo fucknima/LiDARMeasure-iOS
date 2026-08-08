@@ -35,6 +35,7 @@ final class MeasureViewModel: ObservableObject {
     @Published private(set) var pointCount = 0
     @Published private(set) var isSaving = false
     @Published var showDebugOverlay = false
+    @Published var showCoordinateDebug = false
 
     private let raycastService = RaycastService.self
     private var dragStart: CGPoint?
@@ -42,9 +43,11 @@ final class MeasureViewModel: ObservableObject {
 
     var capabilities: DeviceCapabilities { sessionManager.capabilities }
 
-    /// 自动模式检测结果（Vision 左下原点归一化坐标）。
-    var detections: [DetectedObject] { autoCoordinator.detections }
-    var selectedObjectID: UUID? { autoCoordinator.selectedObjectID }
+    /// 分割检测结果（模型空间左下原点归一化）。
+    var detections: [SegmentedObject] { autoCoordinator.detections }
+    var tracks: [TrackedObject] { autoCoordinator.tracks }
+    var selectedStableID: UUID? { autoCoordinator.selectedStableID }
+    var selectedObject: SegmentedObject? { autoCoordinator.selectedObject }
     var autoState: AutoMeasureState { autoCoordinator.state }
     var pipelineDebug: AutoMeasureCoordinator.PipelineDebug { autoCoordinator.debug }
 
@@ -52,7 +55,7 @@ final class MeasureViewModel: ObservableObject {
         let defaults = UserDefaults.standard
         unit = MeasurementUnit(rawValue: defaults.string(forKey: "measurement.unit") ?? "") ?? .centimeter
         let storedThreshold = defaults.float(forKey: "detection.threshold")
-        detectionThreshold = storedThreshold > 0 ? storedThreshold : 0.35
+        detectionThreshold = storedThreshold > 0 ? storedThreshold : 0.30
         sessionManager.frameHandler = { [weak self] frame in
             self?.process(frame: frame)
         }
@@ -73,6 +76,8 @@ final class MeasureViewModel: ObservableObject {
         switch autoState {
         case .searching: return "未检测到支持的目标，可点击框选"
         case .detected: return "已识别目标，保持手机稳定"
+        case .segmenting: return "正在分割目标…"
+        case .collectingDepth: return "正在收集深度…"
         case .measuring: return "测量中…保持手机稳定"
         case .stabilizing: return "测量中…尺寸逐渐稳定"
         case .locked: return "测量已锁定"
@@ -148,10 +153,12 @@ final class MeasureViewModel: ObservableObject {
         }
     }
 
-    /// 点击选择自动模式目标（tap 手势调用）。
+    /// 点击选择自动模式目标（基于 stableID）。
     func selectAutoTarget(at location: CGPoint) {
         guard mode == .automatic else { return }
-        autoCoordinator.select(at: location, viewSize: viewportSize)
+        guard let frame = sessionManager.lastFrame else { return }
+        let geometry = FrameGeometry.make(frame: frame, viewportSize: viewportSize)
+        autoCoordinator.select(at: location, geometry: geometry)
     }
 
     // MARK: - 框选
@@ -291,10 +298,11 @@ final class MeasureViewModel: ObservableObject {
         } else {
             target = nil
         }
+        let viewSize = viewportSize
         Task { [weak self] in
             guard let self else { return }
-            await self.autoCoordinator.process(frame: frame, target: target)
-            self.pointCount = self.autoCoordinator.debug.pointCount
+            await self.autoCoordinator.process(frame: frame, target: target, viewSize: viewSize)
+            self.pointCount = self.autoCoordinator.debug.filteredPointCount
             self.quality = self.autoCoordinator.quality
             if self.autoCoordinator.state == .locked, let dims = self.autoCoordinator.dimensions {
                 self.dimensions = dims
@@ -308,11 +316,22 @@ final class MeasureViewModel: ObservableObject {
     private func normalizedSelectionRect() -> CGRect? {
         guard let rect = selectionRect,
               viewportSize.width > 0, viewportSize.height > 0 else { return nil }
+        // 框选矩形 → 显示空间归一化（视图点 → displayTransform 反解）。
+        guard let frame = sessionManager.lastFrame else { return nil }
+        let transform = frame.displayTransform(for: .portrait, viewportSize: viewportSize)
+        let topLeft = CoordinateMapper.displayNormalized(
+            viewPoint: CGPoint(x: rect.minX, y: rect.minY),
+            transform: transform
+        )
+        let bottomRight = CoordinateMapper.displayNormalized(
+            viewPoint: CGPoint(x: rect.maxX, y: rect.maxY),
+            transform: transform
+        )
         return CGRect(
-            x: rect.minX / viewportSize.width,
-            y: rect.minY / viewportSize.height,
-            width: rect.width / viewportSize.width,
-            height: rect.height / viewportSize.height
+            x: min(topLeft.x, bottomRight.x),
+            y: min(topLeft.y, bottomRight.y),
+            width: abs(bottomRight.x - topLeft.x),
+            height: abs(bottomRight.y - topLeft.y)
         )
     }
 }

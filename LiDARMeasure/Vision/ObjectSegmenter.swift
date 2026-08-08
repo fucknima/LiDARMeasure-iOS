@@ -43,7 +43,7 @@ enum ObjectSegmenter {
                 // mask 为左上原点像素数据，转为左下原点归一化后与检测框比 IoU。
                 let maskBox = maskBoundingBox(mask)
                 guard maskBox.width > 0 else { continue }
-                let boxBottomLeft = VisionCoordinateMapper.bottomLeft(maskBox)
+                let boxBottomLeft = CoordinateMapper.bottomLeft(display: maskBox)
                 let iou = BoxOps.intersectionOverUnion(boxBottomLeft, targetBox)
                 if iou > bestIoU {
                     bestIoU = iou
@@ -53,7 +53,7 @@ enum ObjectSegmenter {
         }
         guard let bestMask, bestIoU >= minimumIoU else { return nil }
 
-        let instanceBox = VisionCoordinateMapper.bottomLeft(maskBoundingBox(bestMask))
+        let instanceBox = CoordinateMapper.bottomLeft(display: maskBoundingBox(bestMask))
         return SegmentResult(mask: bestMask, instanceBox: instanceBox, matchedIoU: bestIoU)
     }
 

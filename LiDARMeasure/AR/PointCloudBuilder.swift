@@ -5,16 +5,22 @@ import simd
 
 /// 从深度图构建目标点云：只扫描 Target ROI（不扫整张深度图）。
 ///
-/// 过滤链：ROI → mask ∩ ROI → 深度带 → 置信度 → 无效值。
+/// 过滤链：显示空间 ROI → mask ∩ ROI → 深度带 → 置信度 → 无效值。
+///
+/// 坐标映射（任务书第 51 条）：
+/// 深度像素空间（横向）与显示空间（竖屏）存在旋转关系，禁止直接把
+/// depth 归一化坐标乘 mask 尺寸。每个深度像素先转换到显示归一化
+/// 坐标，再查询 mask / ROI（scaleFill 下 mask 与显示空间直接对应）。
+///
 /// 输出世界坐标点云，并统计深度有效率。
 enum PointCloudBuilder {
     struct Configuration {
         var stride: Int = 2
         var minimumConfidence: Float = 0.5
         var depthBand: ClosedRange<Float>?
-        /// 左上原点归一化 ROI。
+        /// 显示空间归一化 ROI（左上原点）。
         var roi: CGRect?
-        /// 实例分割 mask（左上原点像素数据），仅采样 mask > 0 的位置。
+        /// 实例分割 mask（显示空间对齐，左上原点像素数据）。
         var mask: CVPixelBuffer?
     }
 
@@ -33,6 +39,7 @@ enum PointCloudBuilder {
         guard width > 0, height > 0 else { return Result(points: [], validDepthRatio: 0) }
 
         let geometry = DepthCoordinateMapper.geometry(frame: frame, depthMap: map)
+        let depthSize = CGSize(width: width, height: height)
 
         CVPixelBufferLockBaseAddress(map, .readOnly)
         let confidenceMap = depthData.confidenceMap
@@ -77,13 +84,8 @@ enum PointCloudBuilder {
         var totalSampled = 0
         var validDepthCount = 0
 
-        let xStart = roi.map { max(0, Int($0.minX * CGFloat(width))) } ?? 0
-        let xEnd = roi.map { min(width, Int($0.maxX * CGFloat(width))) } ?? width
-        let yStart = roi.map { max(0, Int($0.minY * CGFloat(height))) } ?? 0
-        let yEnd = roi.map { min(height, Int($0.maxY * CGFloat(height))) } ?? height
-
-        for y in yStart..<yEnd where y % stride == stride / 2 {
-            for x in xStart..<xEnd where x % stride == stride / 2 {
+        for y in stride / 2..<height where y % stride == stride / 2 {
+            for x in stride / 2..<width where x % stride == stride / 2 {
                 totalSampled += 1
                 let depth = values[y * rowStride + x]
                 let isInvalid = !depth.isFinite || depth <= 0
@@ -96,10 +98,17 @@ enum PointCloudBuilder {
                 if isInvalid || confidence < configuration.minimumConfidence { continue }
                 validDepthCount += 1
                 if let band = configuration.depthBand, !band.contains(depth) { continue }
+
+                // 深度像素 → 显示归一化 → ROI / mask 判定。
+                let displayPoint = CoordinateMapper.displayNormalized(
+                    cameraPixel: x,
+                    py: y,
+                    cameraSize: depthSize
+                )
+                if let roi, !roi.contains(displayPoint) { continue }
                 if let maskValues, maskWidth > 0, maskHeight > 0 {
-                    let normalized = CGPoint(x: CGFloat(x) / CGFloat(width), y: CGFloat(y) / CGFloat(height))
-                    let pixel = VisionCoordinateMapper.maskPixel(
-                        normalized: normalized,
+                    let pixel = CoordinateMapper.maskPixel(
+                        normalized: displayPoint,
                         maskWidth: maskWidth,
                         maskHeight: maskHeight
                     )

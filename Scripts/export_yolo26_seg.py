@@ -34,7 +34,7 @@ def compare(model_a: str, model_b: str):
     import coremltools as ct
     from PIL import Image
 
-    image = Image.open(FIXTURE).convert("RGB")
+    image = Image.open(FIXTURE).convert("RGB").resize((640, 640))
 
     def results(path: str):
         model = ct.models.MLModel(path)
