@@ -19,7 +19,9 @@ actor VisionInferenceService {
 
     init(interval: TimeInterval = 0.15) {
         self.interval = interval
-        self.detector = ObjectDetector()
+        let detector = ObjectDetector()
+        self.detector = detector
+        self.isAvailable = detector != nil
     }
 
     /// 返回 nil 表示跳过（节流或堆积）；返回空数组表示检测完成但无目标。
